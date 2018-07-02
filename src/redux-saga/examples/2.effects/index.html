@@ -1,0 +1,76 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+
+  <script src="https://unpkg.com/redux@latest/dist/redux.min.js"></script>
+  <script src="../../dist/redux-saga.js"></script>
+</head>
+
+<body>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      // 
+      // main.js
+      //
+      let actions
+
+      let { createStore, applyMiddleware, bindActionCreators } = Redux
+      let createSagaMiddleware = ReduxSaga.default
+      let sagaMiddleware = createSagaMiddleware()
+
+      let store = createStore(
+        rootReuder,
+        applyMiddleware(sagaMiddleware)
+      )
+
+      //
+      // sagas.js
+      //
+      let { takeEvery, put, call } = ReduxSaga.effects
+
+      function* fetchProducers() {
+        const products = yield call(fetch)
+        yield put({ type: 'FETCH_PRODUCTS_OK', products })
+      }
+
+      function* watchFetchProducts() {
+        // 捕获 dispatch action "PRODUCTS_REQUESTED" , 转发到 fetchProducers
+        yield takeEvery("PRODUCTS_REQUESTED", fetchProducers)
+      }
+
+      function fetch() {
+        return Promise.resolve([
+          { id: 1, name: 'iPhone' },
+          { id: 2, name: 'iPad' }
+        ])
+      }
+
+      sagaMiddleware.run(watchFetchProducts)
+
+      // 1. dispatch action
+      store.dispatch({ type: 'PRODUCTS_REQUESTED' })
+
+
+      //
+      // reducers.js
+      //
+      function rootReuder(state, action) {
+        switch (action.type) {
+          case 'FETCH_PRODUCTS_OK':
+            state.products = action.products
+            break
+        }
+
+        console.log('nextState:', state)
+
+        return Object.assign({}, state)
+      }
+    })  
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,142 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+
+  <script src="https://unpkg.com/redux@latest/dist/redux.min.js"></script>
+  <script src="../../dist/redux-saga.js"></script>
+</head>
+
+<body>
+  <div id="counter">
+    <button id="incrementAsync">Increment after 1 second</button>
+    <button id="increment">Increment</button>
+    <button id="decrement">Decrement</button>
+    <div>
+      Cliecked:
+      <span id="times"></span> times
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      // 
+      // main.js
+      //
+      let actions
+
+      let { createStore, applyMiddleware, bindActionCreators } = Redux
+      let createSagaMiddleware = ReduxSaga.default
+      let sagaMiddleware = createSagaMiddleware()
+
+      let store = createStore(
+        rootReuder,
+        { times: 0 },
+        applyMiddleware(sagaMiddleware)
+      )
+
+      store.subscribe(change)
+
+      //
+      // view
+      //
+      let $incrementAsync = document.getElementById('incrementAsync')
+      let $increment = document.getElementById('increment')
+      let $decrement = document.getElementById('decrement')
+      let $times = document.getElementById('times')
+
+      function render() {
+        $times.innerText = store.getState().times
+      }
+
+      function change() {
+        render()
+      }
+
+      $incrementAsync.addEventListener('click', function () {
+        actions.incrementAsync()
+      })
+
+      $increment.addEventListener('click', function () {
+        actions.increment()
+      })
+
+      $decrement.addEventListener('click', function () {
+        actions.decrement()
+      })
+
+      render()
+
+      //
+      // sagas.js
+      //
+      let { delay } = ReduxSaga
+      let { put, takeEvery, all } = ReduxSaga.effects
+
+      // 同时执行
+      function* rootSaga() {
+        yield all([
+          incrementAsync(),
+          watchIncrementAsync()
+        ])
+      }
+      function* incrementAsync() {
+        console.log(ReduxSaga)
+        yield delay(1000)
+        yield put({ type: 'INCREMENT' })
+      }
+
+      function* watchIncrementAsync() {
+        yield takeEvery('INCREMENT_ASYNC', incrementAsync)
+      }
+
+      sagaMiddleware.run(rootSaga)
+
+      //
+      // actions.js
+      //
+      actions = bindActionCreators({
+        incrementAsync() {
+          return {
+            type: 'INCREMENT_ASYNC'
+          }
+        },
+        increment() {
+          return {
+            type: 'INCREMENT'
+          }
+        },
+        decrement() {
+          return {
+            type: 'DECREMENT'
+          }
+        },
+      }, store.dispatch)
+
+
+
+      //
+      // reducers.js
+      //
+      function rootReuder(state, action) {
+        let nextState = state;
+
+        switch (action.type) {
+          case 'INCREMENT':
+            nextState.times++;
+            break
+          case 'DECREMENT':
+            nextState.times--;
+            break
+        }
+
+        return Object.assign({}, nextState)
+      }
+    })  
+  </script>
+</body>
+
+</html>
