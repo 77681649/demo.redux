@@ -1,4 +1,4 @@
-const queue = []
+const queue = [];
 /**
   Variable to hold a counting semaphore
   - Incrementing adds a lock and puts the scheduler in a `suspended` state (if it's not
@@ -6,7 +6,7 @@ const queue = []
   - Decrementing releases a lock. Zero locks puts the scheduler in a `released` state. This
     triggers flushing the queued tasks.
 **/
-let semaphore = 0
+let semaphore = 0;
 
 /**
   Executes a task 'atomically'. Tasks scheduled during this execution will be queued
@@ -15,48 +15,49 @@ let semaphore = 0
 **/
 function exec(task) {
   try {
-    suspend()
-    task()
+    suspend();
+    task();
   } finally {
-    release()
+    release();
   }
 }
 
 /**
-  Executes or queues a task depending on the state of the scheduler (`suspended` or `released`)
-**/
+ * Executes or queues a task depending on the state of the scheduler (`suspended` or `released`)
+ * @param {*} task
+ */
 export function asap(task) {
-  queue.push(task)
+  queue.push(task);
 
   if (!semaphore) {
-    suspend()
-    flush()
+    suspend();
+    flush();
   }
 }
 
 /**
-  Puts the scheduler in a `suspended` state. Scheduled tasks will be queued until the
-  scheduler is released.
-**/
+ * Puts the scheduler in a `suspended` state. Scheduled tasks will be queued until the
+ * scheduler is released.
+ */
 export function suspend() {
-  semaphore++
+  semaphore++;
 }
 
 /**
-  Puts the scheduler in a `released` state.
-**/
+ * Puts the scheduler in a `released` state.
+ */
 function release() {
-  semaphore--
+  semaphore--;
 }
 
 /**
-  Releases the current lock. Executes all queued tasks if the scheduler is in the released state.
-**/
+ * Releases the current lock. Executes all queued tasks if the scheduler is in the released state.
+ */
 export function flush() {
-  release()
+  release();
 
-  let task
+  let task;
   while (!semaphore && (task = queue.shift()) !== undefined) {
-    exec(task)
+    exec(task);
   }
 }
