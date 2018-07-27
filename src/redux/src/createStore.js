@@ -2,6 +2,10 @@ import isPlainObject from "lodash/isPlainObject";
 import $$observable from "symbol-observable";
 
 /**
+ * 私有的redux
+ * 对于一个reducer来说,
+ * 遇到未知的action时, 应该返回current state ( 原封不动返回 ), 遇到current state = undefined时, 应该返回初始状态
+ *  
  * These are private action types reserved by Redux.
  * For any unknown actions, you must return the current state.
  * If the current state is undefined, you must return the initial state.
@@ -12,6 +16,12 @@ export var ActionTypes = {
 };
 
 /**
+ * 创建一个用来存储状态树的redux store ( 改变store中数据的唯一防范: 调用"dipsatch()" )
+ * 
+ * 应用中的store是唯一的:
+ * 可以指定状态树的不同部分响应不同的action
+ * 使用"combineReducers"将几个reducer组合成单一的reducer函数
+ * 
  * Creates a Redux store that holds the state tree.
  * The only way to change the data in the store is to call `dispatch()` on it.
  *
@@ -20,29 +30,47 @@ export var ActionTypes = {
  * into a single reducer function by using `combineReducers`.
  *
  * @param {Function} reducer A function that returns the next state tree, given
- * the current state tree and the action to handle.
+ * the current state tree and the action to handle. 
+ * 
+ * 传递current state tree和待处理的action, 返回next state
+ * (state,action)->nextStates
  *
  * @param {any} [preloadedState] The initial state. You may optionally specify it
  * to hydrate the state from the server in universal apps, or to restore a
  * previously serialized user session.
  * If you use `combineReducers` to produce the root reducer function, this must be
  * an object with the same shape as `combineReducers` keys.
+ * 
+ * 初始状态:
+ *  从服务器端来的"hydrate"状态
+ *  从会话中恢复的数据
+ * 
+ * 如果使用"combineReducres"产生root reducer, 那么初始状态的结构一定要和"combineReducers"的key保持一致
  *
  * @param {Function} enhancer The store enhancer. You may optionally specify it
  * to enhance the store with third-party capabilities such as middleware,
  * time travel, persistence, etc. The only store enhancer that ships with Redux
  * is `applyMiddleware()`.
+ * 
+ * store 增强器:
+ * 使用第三方功能(如中间件,时间旅行,持久化等)增强store的 ( 例如 applyMiddleware就是一个增强器 )
+ * 
  *
  * @returns {Store} A Redux store that lets you read the state, dispatch actions
  * and subscribe to changes.
  */
 export default function createStore(reducer, preloadedState, enhancer) {
-  // 省略preloadedState的情况
+  //
+  // 处理preloadedState缺省的情况
+  //
   if (typeof preloadedState === "function" && typeof enhancer === "undefined") {
     enhancer = preloadedState;
     preloadedState = undefined;
   }
-
+  
+  //
+  // enhance store
+  //
   if (typeof enhancer !== "undefined") {
     if (typeof enhancer !== "function") {
       throw new Error("Expected the enhancer to be a function.");
@@ -52,6 +80,9 @@ export default function createStore(reducer, preloadedState, enhancer) {
     return enhancer(createStore)(reducer, preloadedState);
   }
 
+  //
+  // check reducer
+  //
   if (typeof reducer !== "function") {
     throw new Error("Expected the reducer to be a function.");
   }
@@ -62,6 +93,9 @@ export default function createStore(reducer, preloadedState, enhancer) {
   var nextListeners = currentListeners;
   var isDispatching = false;
 
+  /**
+   * 
+   */
   function ensureCanMutateNextListeners() {
     if (nextListeners === currentListeners) {
       nextListeners = currentListeners.slice();
@@ -78,6 +112,9 @@ export default function createStore(reducer, preloadedState, enhancer) {
   }
 
   /**
+   * 添加一个change监听器
+   * 
+   * 
    * Adds a change listener. It will be called any time an action is dispatched,
    * and some part of the state tree may potentially have changed. You may then
    * call `getState()` to read the current state tree inside the callback.
@@ -90,6 +127,7 @@ export default function createStore(reducer, preloadedState, enhancer) {
    * will not have any effect on the `dispatch()` that is currently in progress.
    * However, the next `dispatch()` call, whether nested or not, will use a more
    * recent snapshot of the subscription list.
+   * 
    *
    * 2. The listener should not expect to see all state changes, as the state
    * might have been updated multiple times during a nested `dispatch()` before
@@ -124,13 +162,18 @@ export default function createStore(reducer, preloadedState, enhancer) {
   }
 
   /**
-   * Dispatches an action. It is the only way to trigger a state change.
+   * 分发一个action( 它是触发状态改变的唯一方法 )
+   * 1. nextState = reducer(currentState,action)
+   * 2. nodify listeners
    *
+   * Dispatches an action. It is the only way to trigger a state change.
+   * 
+   * 
    * The `reducer` function, used to create the store, will be called with the
    * current state tree and the given `action`. Its return value will
    * be considered the **next** state of the tree, and the change listeners
    * will be notified.
-   *
+   * 
    * The base implementation only supports plain object actions. If you want to
    * dispatch a Promise, an Observable, a thunk, or something else, you need to
    * wrap your store creating function into the corresponding middleware. For
@@ -149,6 +192,9 @@ export default function createStore(reducer, preloadedState, enhancer) {
    * return something else (for example, a Promise you can await).
    */
   function dispatch(action) {
+    //
+    // check action
+    //
     if (!isPlainObject(action)) {
       throw new Error(
         "Actions must be plain objects. " +
@@ -156,6 +202,9 @@ export default function createStore(reducer, preloadedState, enhancer) {
       );
     }
 
+    //
+    // check action.type 
+    //
     if (typeof action.type === "undefined") {
       throw new Error(
         'Actions may not have an undefined "type" property. ' +
@@ -163,11 +212,16 @@ export default function createStore(reducer, preloadedState, enhancer) {
       );
     }
 
-    // 同时刻只能有一个dispatch的action
+    // 
+    // 确保同一时刻, 只能出现dispatch 一个action
+    //
     if (isDispatching) {
       throw new Error("Reducers may not dispatch actions.");
     }
 
+    //
+    // 调用createStore时, 提供的reducer, 获得nextState
+    //
     try {
       isDispatching = true;
       currentState = currentReducer(currentState, action);
@@ -175,12 +229,15 @@ export default function createStore(reducer, preloadedState, enhancer) {
       isDispatching = false;
     }
 
-    // 发布变更消息
+    // 
+    // 通知订阅者
+    //
     var listeners = (currentListeners = nextListeners);
     for (var i = 0; i < listeners.length; i++) {
       listeners[i]();
     }
 
+    // 返回处理的action
     return action;
   }
 
