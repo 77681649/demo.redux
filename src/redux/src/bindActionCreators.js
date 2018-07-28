@@ -3,6 +3,9 @@ function bindActionCreator(actionCreator, dispatch) {
 }
 
 /**
+ * action helper
+ *
+ *
  * Turns an object whose values are action creators, into an object with the
  * same keys, but with every function wrapped into a `dispatch` call so they
  * may be invoked directly. This is just a convenience method, as you can call
@@ -24,7 +27,9 @@ function bindActionCreator(actionCreator, dispatch) {
  * function.
  */
 export default function bindActionCreators(actionCreators, dispatch) {
-  // 单个action creator
+  //
+  // 处理单个action creator
+  //
   if (typeof actionCreators === "function") {
     return bindActionCreator(actionCreators, dispatch);
   }
@@ -40,6 +45,7 @@ export default function bindActionCreators(actionCreators, dispatch) {
 
   var keys = Object.keys(actionCreators);
   var boundActionCreators = {};
+
   for (var i = 0; i < keys.length; i++) {
     var key = keys[i];
     var actionCreator = actionCreators[key];

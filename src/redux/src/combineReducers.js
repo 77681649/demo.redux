@@ -62,10 +62,11 @@ function assertReducerSanity(reducers) {
   Object.keys(reducers).forEach(key => {
     var reducer = reducers[key];
 
-    // 测试执行
+    //
+    // 确保reducer会返回初始状态
+    //
     var initialState = reducer(undefined, { type: ActionTypes.INIT });
 
-    // reducer 返回的状态不能为undefined
     if (typeof initialState === "undefined") {
       throw new Error(
         `Reducer "${key}" returned undefined during initialization. ` +
@@ -75,6 +76,9 @@ function assertReducerSanity(reducers) {
       );
     }
 
+    //
+    // 确保 遇到未知的action时, 会返回初始状态 or 默认值
+    //
     var type =
       "@@redux/PROBE_UNKNOWN_ACTION_" +
       Math.random()
@@ -83,7 +87,6 @@ function assertReducerSanity(reducers) {
         .split("")
         .join(".");
 
-    // 任意action 都不能返回undefined
     if (typeof reducer(undefined, { type }) === "undefined") {
       throw new Error(
         `Reducer "${key}" returned undefined when probed with a random type. ` +
@@ -100,6 +103,9 @@ function assertReducerSanity(reducers) {
 }
 
 /**
+ * 将值为不同reducer函数的对象,转变为单个reducer函数(root reducer)
+ * 它将调用每次子reducer,并且会将它们返回的结果收集到与传递的reducer函数对象的key对应的单一的状态对象中.
+ *
  * Turns an object whose values are different reducer functions, into a single
  * reducer function. It will call every child reducer, and gather their results
  * into a single state object, whose keys correspond to the keys of the passed
@@ -118,6 +124,7 @@ function assertReducerSanity(reducers) {
 export default function combineReducers(reducers) {
   var reducerKeys = Object.keys(reducers);
   var finalReducers = {};
+
   for (var i = 0; i < reducerKeys.length; i++) {
     var key = reducerKeys[i];
 
@@ -127,18 +134,23 @@ export default function combineReducers(reducers) {
       }
     }
 
-    // 选取为函数的reducer
+    //
+    // 筛选出有效的reducer函数
+    //
     if (typeof reducers[key] === "function") {
       finalReducers[key] = reducers[key];
     }
   }
+
   var finalReducerKeys = Object.keys(finalReducers);
 
   if (process.env.NODE_ENV !== "production") {
     var unexpectedKeyCache = {};
   }
 
-  // 检查reducer
+  //
+  // 确保reducer是安全的
+  //
   var sanityError;
   try {
     assertReducerSanity(finalReducers);
@@ -166,6 +178,8 @@ export default function combineReducers(reducers) {
 
     var hasChanged = false;
     var nextState = {};
+
+    // 遍历child reducer, 获得next state
     for (var i = 0; i < finalReducerKeys.length; i++) {
       var key = finalReducerKeys[i];
       var reducer = finalReducers[key];

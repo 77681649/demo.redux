@@ -31,6 +31,11 @@ export default function applyMiddleware(...middlewares) {
    * next:          下一个中间件
    * aciton:        接收到的action
    *
+   * 使用方法1:
+   * store = createStore(reducer,preloadedState,applyMiddleware(...middlewares))
+   *
+   * 使用方法2:
+   * store = applyMiddleware(...middlewares)(createStore)(reducer, preloadedState, enhancer)
    */
   return createStore => (reducer, preloadedState, enhancer) => {
     // 用Store工厂方法createStore创建一个store

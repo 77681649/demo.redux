@@ -1,2 +1,7 @@
-01: 测试subscribe的快照特性
-02: 实现一个简单的store enchaner -- 将state持久化到文件中
+- 1: [测试 subscribe 的快照特性]()
+- 2: [实现一个简单的 store enchaner -- 将 state 持久化到文件中]()
+- 3: [使用 bindActionCreators 简化 actionCreator]()
+- 4: [使用 combineReducers 拆分 reducer]()
+- 5: [使用 compose 进行复合函数运算]()
+- 6: [使用 applyMiddleware 注册 thunk 实现异步 action 的处理]()
+- 7: [使用 compose,applyMiddleware 实现异步 action 和 日志比较]()

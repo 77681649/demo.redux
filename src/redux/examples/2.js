@@ -1,4 +1,4 @@
-const { createStore } = require("../dist/redux");
+const { createStore } = require("./redux");
 
 function persist(createStore) {
   const fs = require("fs");
@@ -61,4 +61,3 @@ const store = createStore((state, action) => {
 store.dispatch({
   type: "INCREMENT"
 });
-
