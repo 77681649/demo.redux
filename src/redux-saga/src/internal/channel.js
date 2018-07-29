@@ -16,7 +16,7 @@ export const END = { type: CHANNEL_END_TYPE };
 export const isEnd = a => a && a.type === CHANNEL_END_TYPE;
 
 /**
- * Emitter 消息中心
+ * Emitter 消息中心 ( 全局的 ) -- 负责分发
  * @returns {Object} {subscribe,emit}
  */
 export function emitter() {
@@ -25,6 +25,7 @@ export function emitter() {
   /**
    * 订阅事件 - 添加订阅者
    * @param {Function} sub 订阅者
+   * @returns {Function} 返回用于取消订阅的函数
    */
   function subscribe(sub) {
     subscribers.push(sub);
@@ -61,7 +62,7 @@ if (process.env.NODE_ENV !== "production") {
 
 /**
  * 创建一个渠道(消息分发中心), 负责接收(put)消息,并将接收到的消息分发给何时的接受者(taker)
- * @param {Buffer} 渠道的数据区缓冲区
+ * @param {Buffer} buffer 缓冲区
  * @returns {}
  */
 export function channel(buffer = buffers.fixed()) {
@@ -90,7 +91,7 @@ export function channel(buffer = buffers.fixed()) {
   }
 
   /**
-   * 存 - 输入消息(生产消息)
+   * 存 - 输入消息(生产消息), 将消息放入缓冲区
    * @param {Object} input 输入的消息
    */
   function put(input) {
@@ -192,8 +193,8 @@ export function channel(buffer = buffers.fixed()) {
 
 /**
  * 事件分发渠道 - 将订阅的事件分发给响应的消费者
- * @param {Function} subscribe 事件订阅器
- * @param {Buffer} buffer 缓冲区
+ * @param {Function} subscribe 消息订阅函数
+ * @param {Buffer} [buffer=buffers.none()] 缓冲区, 默认不使用队列机制
  * @param {Function} matcher 匹配器
  */
 export function eventChannel(subscribe, buffer = buffers.none(), matcher) {
@@ -205,7 +206,7 @@ export function eventChannel(subscribe, buffer = buffers.none(), matcher) {
     check(matcher, is.func, "Invalid match function passed to eventChannel");
   }
 
-  // 创建一个渠道
+  // 创建一个通信渠道
   const chan = channel(buffer);
 
   // enhance close
@@ -260,10 +261,12 @@ export function eventChannel(subscribe, buffer = buffers.none(), matcher) {
 
 /**
  *
- * @param {Function} subscribe
+ * @param {Function} subscribe 消息订阅函数
  */
 export function stdChannel(subscribe) {
+  //
   // 创建事件分发渠道
+  //
   const chan = eventChannel(cb =>
     subscribe(input => {
       if (input[SAGA_ACTION]) {
@@ -277,6 +280,12 @@ export function stdChannel(subscribe) {
 
   return {
     ...chan,
+
+    /**
+     *
+     * @param {Function} cb
+     * @param {Function} matcher
+     */
     take(cb, matcher) {
       if (arguments.length > 1) {
         check(

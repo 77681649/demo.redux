@@ -12,10 +12,17 @@ const RUN_SAGA_SIGNATURE = "runSaga(storeInterface, saga, ...args)";
 const NON_GENERATOR_ERR = `${RUN_SAGA_SIGNATURE}: saga argument must be a Generator function!`;
 
 /**
- *
+ * 运行saga
  * @param {Object} storeInterface redux-store 接口
- * @param {Generator} saga saga
- * @param {...args} args 传递给saga的参数
+ * @param {Object} storeInterface.context saga的上下文, 将作为task的父级上下文
+ * @param {Object} storeInterface.subscribe 消息订阅函数, 用于订阅redux-saga接收到消息(action)
+ * @param {Object} storeInterface.dispatch 消息分发器
+ * @param {Object} storeInterface.getState 状态取值器
+ * @param {Object} storeInterface.sagaMonitor saga 监视器
+ * @param {Object} storeInterface.logger saga 日志函数
+ * @param {Object} storeInterface.onError saga 错误处理函数
+ * @param {Generator} saga 需要运行的saga
+ * @param {any[]} ...args 传递给saga的参数
  * @returns {Task} 返回一个 Task 描述对象
  */
 export function runSaga(storeInterface, saga, ...args) {
@@ -32,7 +39,10 @@ export function runSaga(storeInterface, saga, ...args) {
     storeInterface = saga;
   } else {
     check(saga, is.func, NON_GENERATOR_ERR);
-    iterator = saga(...args); // 创建生成器对象
+    //
+    // 1. 创建generator对象
+    //
+    iterator = saga(...args);
     check(iterator, is.iterator, NON_GENERATOR_ERR);
   }
 
@@ -52,7 +62,9 @@ export function runSaga(storeInterface, saga, ...args) {
   //
   const effectId = nextSagaId();
 
-  // 发送监控事件
+  //
+  // 2. 发送监控事件
+  //
   if (sagaMonitor) {
     // monitors are expected to have a certain interface, let's fill-in any missing ones
     sagaMonitor.effectTriggered = sagaMonitor.effectTriggered || noop;
@@ -69,6 +81,9 @@ export function runSaga(storeInterface, saga, ...args) {
     });
   }
 
+  //
+  // 3.
+  //
   const task = proc(
     // saga生成器对象
     iterator,
@@ -95,11 +110,15 @@ export function runSaga(storeInterface, saga, ...args) {
     saga.name
   );
 
-  // 发送监控事件
+  //
+  // 4. 发送监控事件
+  //
   if (sagaMonitor) {
     sagaMonitor.effectResolved(effectId, task);
   }
 
-  // 返回 task
+  //
+  // 5. 返回 task
+  //
   return task;
 }

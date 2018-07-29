@@ -1,13 +1,14 @@
+import chalk from "chalk";
 const {
   createStore,
   applyMiddleware,
   compose,
   bindActionCreators,
   combineReducers
-} = require("../dist/redux");
+} = require("../../../redux/src");
 const defaultReducer = (state, action) => state;
 const log = api => next => action => {
-  console.log("Dispatch:", action);
+  console.log(chalk.bgYellow("Dispatch:"), action);
   return next(action);
 };
 
@@ -19,7 +20,7 @@ const withDiffLogger = () => createStore => (reducer, preload, enchaner) => {
     let nextState = store.getState();
 
     if (prevState != nextState) {
-      console.log("State Diff:");
+      console.log(chalk.bgBlue("State Diff:"));
 
       if (nextState === null) {
         console.log("nextState is null");
@@ -30,7 +31,7 @@ const withDiffLogger = () => createStore => (reducer, preload, enchaner) => {
 
       keys.forEach(key => {
         if (prevState === null || prevState[key] != nextState[key]) {
-          console.log(`  ${key}:`, nextState[key]);
+          console.log(`  ${chalk.green(key)}:`, nextState[key]);
         }
       });
     }

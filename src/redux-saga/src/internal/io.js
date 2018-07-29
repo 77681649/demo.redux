@@ -129,6 +129,9 @@ export function race(effects) {
   return effect(RACE, effects);
 }
 
+/**
+ *
+ */
 function getFnCallDesc(meth, fn, args) {
   check(fn, is.notUndef, `${meth}: argument fn is undefined`);
 

@@ -5,9 +5,13 @@ import { runSaga } from "./runSaga";
 
 /**
  *
- * @param {*} options
- * @param {} context
- * @param {} options
+ * @param {Object} [config] 中间件的配置
+ * @param {Object} [config.context]
+ * @param {Object} [config.options]
+ * @param {Object} [config.options.sagaMonitor]
+ * @param {Function} [config.options.emitter]
+ * @param {Function} [config.options.logger] 自定义的错误日志方法(默认输出在控制台) (level message,error)=>void
+ * @param {Function} [config.options.onError] 自定义的错误处理方法(默认是输出日志) (result)=>void
  */
 export default function sagaMiddlewareFactory({
   context = {},
@@ -67,7 +71,6 @@ export default function sagaMiddlewareFactory({
   //
   // ---------------------------------------- 创建saga中间件
   //
-
   function sagaMiddleware({ getState, dispatch }) {
     /**
      *
@@ -100,7 +103,7 @@ export default function sagaMiddlewareFactory({
       // 2. 执行后序中间件 hit reducers ( 为了让该事件能传递到reducer )
       const result = next(action);
 
-      // 3. 发布 action
+      // 3. 触发 action
       sagaEmitter.emit(action);
 
       return result;

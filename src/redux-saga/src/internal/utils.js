@@ -1,3 +1,8 @@
+/**
+ * 附加前缀
+ * @params {String} id id
+ * @returns {String}
+ */
 export const sym = id => `@@redux-saga/${id}`;
 
 export const TASK = sym("TASK");
@@ -40,7 +45,7 @@ export const noop = () => {};
 export const ident = v => v;
 
 /**
- * 断言 assert - 断言失败时, 抛出异常
+ * 断言 assert - 如果断言失败时(predicate返回false)时, 抛出异常
  * @params {any} value 被断言的值
  * @params {Function} predicate 谓词
  * @params {String} message 日志消息
@@ -195,10 +200,11 @@ export function makeIterator(next, thro = kThrow, name = "", isHelper) {
 }
 
 /**
-  Print error in a useful way whether in a browser environment
-  (with expandable error stack traces), or in a node.js environment
-  (text-only log output)
- **/
+ * 日志函数
+ * @param {String} level 日志级别
+ * @param {String} message 日志消息
+ * @param {Error|String} error 错误对象
+ */
 export function log(level, message, error = "") {
   /*eslint-disable no-console*/
   if (typeof window === "undefined") {

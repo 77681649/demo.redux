@@ -23,10 +23,28 @@ import { stdChannel as _stdChannel, eventChannel, isEnd } from "./channel";
 import { buffers } from "./buffers";
 
 /**
- * SagaIterator
- * _result      {any}
- * _error       {Error}
- * _deferredEnd {Promise}
+ * 负责跟踪主任务的状态
+ * @typedef MainTask
+ * @property {String} name 主任务名称
+ * @property {Function} cancel 取消函数
+ * @property {Boolean} [isRunning=true] 是否正在运行
+ * @property {Boolean} [isCancelled=false] 是否已经被取消
+ * @property {Function} cont
+ */
+
+/**
+ * @typedef Task
+ * @property {Function} cont
+ */
+
+/**
+ * @typedef SagaIterator
+ * @property {any} _result 获得执行结果
+ * @property {Error} _error 获得执行过程中产生的错误对象
+ * @property {Promise} _deferredEnd
+ * @property {Boolean} _isRunning 是否正在运行
+ * @property {Boolean} _isCancelled 是否已经被取消
+ * @property {Boolean} _isAborted 是否已经被终止
  */
 
 export const NOT_ITERATOR_ERROR =
@@ -79,35 +97,76 @@ function matcher(pattern) {
   - It aborts if any uncaught error bubbles up from forks
   - If it completes, the return value is the one returned by the main task
 **/
-function forkQueue(name, mainTask, cb) {
-  let tasks = [],
-    result,
-    completed = false;
 
+/**
+ * 创建pending队列
+ *  1. 负责管理fork task
+ *  2. 负责在main task && fork task执行完成之后, 调用cb返回结果
+ * @param {String} name 队列的名称
+ * @param {MainTask} mainTask 主任务对象
+ * @param {Function} [cb] 当队列中的任务执行完成或者被终止时调用 (res:Error|any,isErr:Boolean)
+ * @returns {Object} 返回队列对象
+ */
+function forkQueue(name, mainTask, cb) {
+  let tasks = [], // pending tasks
+    result, // 最终的结果
+    completed = false; // 是否执行完毕
+
+  //
+  // 将mainTask添加到队列中
+  //
   addTask(mainTask);
 
+  /**
+   * 终止 - 取消所有pending task && 返回结果
+   * @param {*} err
+   */
   function abort(err) {
     cancelAll();
+
+    // 调用回调函数
     cb(err, true);
   }
 
+  /**
+   * 向队列中添加pending task
+   * @param {MainTask|Task} task
+   */
   function addTask(task) {
     tasks.push(task);
+
+    /**
+     * 任务完成
+     * @param {Any} res 运行结果
+     * @param {Boolean} isErr 运行过程中是否发生错误
+     */
     task.cont = (res, isErr) => {
       if (completed) {
         return;
       }
 
+      // 从队列中删除
       remove(tasks, task);
+
+      // 断开连接 - 避免多次调用导致问题
       task.cont = noop;
+
       if (isErr) {
+        //
+        // 如果发生错误, 那么终止整个任务
+        //
         abort(res);
       } else {
+        // 如果是主任务完成, 将res作为最终的结果
         if (task === mainTask) {
           result = res;
         }
+
+        // pending queue空, 将队列标记为完成
         if (!tasks.length) {
           completed = true;
+
+          // 调用回调函数
           cb(result);
         }
       }
@@ -115,15 +174,21 @@ function forkQueue(name, mainTask, cb) {
     // task.cont.cancel = task.cancel
   }
 
+  /**
+   * 取消
+   */
   function cancelAll() {
     if (completed) {
       return;
     }
+
     completed = true;
+
     tasks.forEach(t => {
       t.cont = noop;
       t.cancel();
     });
+
     tasks = [];
   }
 
@@ -131,7 +196,15 @@ function forkQueue(name, mainTask, cb) {
     addTask,
     cancelAll,
     abort,
+
+    /**
+     * 获得所有任务
+     */
     getTasks: () => tasks,
+
+    /**
+     * 获得所有任务的名称
+     */
     taskNames: () => tasks.map(t => t.name)
   };
 }
@@ -184,15 +257,15 @@ function createTaskIterator({ context, fn, args }) {
 const wrapHelper = helper => ({ fn: helper });
 
 /**
- *
- * @param {Iterator} iterator
- * @param {Function} subscribe emitter.subscribe 订阅
- * @param {Function} dispatch 事件分发器
- * @param {Function} getState 获得状态
+ * 创建并运行一个task
+ * @param {Iterator} iterator saga 生成器对象
+ * @param {Function} subscribe emitter.subscribe emitter 订阅函数
+ * @param {Function} dispatch action
+ * @param {Function} getState action
  * @param {Object} parentContext 上下文
- * @param {Object} options
+ * @param {Object} options 选项
  * @param {Number} parentEffectId id
- * @param {String} name 名称
+ * @param {String} name saga的名称
  * @param {} cont
  * @returns {Task}
  */
@@ -207,11 +280,15 @@ export default function proc(
   name = "anonymous",
   cont
 ) {
-  // assert is iterator
+  //
+  // assert iterator是否有效
+  //
   check(iterator, is.iterator, NOT_ITERATOR_ERROR);
 
+  //
+  // 处理过期
+  //
   const effectsString = "[...effects]";
-
   const runParallelEffect = deprecate(
     runAllEffect,
     updateIncentive(effectsString, `all(${effectsString})`)
@@ -219,6 +296,10 @@ export default function proc(
 
   const { sagaMonitor, logger, onError } = options;
   const log = logger || _log;
+
+  //
+  // 生成error日志函数
+  //
   const logError = err => {
     let message = err.sagaStack;
 
@@ -233,8 +314,12 @@ export default function proc(
   };
 
   //
+  // 创建 channel
+  //
   const stdChannel = _stdChannel(subscribe);
 
+  //
+  // 创建 task的上下文对象
   //
   const taskContext = Object.create(parentContext);
 
@@ -245,18 +330,31 @@ export default function proc(
   **/
   next.cancel = noop;
 
-  /**
-    Creates a new task descriptor for this generator, We'll also create a main task
-    to track the main flow (besides other forked tasks)
-  **/
+  //
+  // 为generator对象创建一个task对象.
+  //
   const task = newTask(parentEffectId, name, iterator, cont);
-  const mainTask = { name, cancel: cancelMain, isRunning: true };
+
+  //
+  // 创建一个跟踪主流程的Main Task
+  // We'll also create a main task to track the main flow (besides other forked tasks)
+  //
+  const mainTask = {
+    name,
+    cancel: cancelMain,
+    isRunning: true
+  };
+
+  //
+  // 创建一个 task queue
+  //
   const taskQueue = forkQueue(name, mainTask, end);
 
   /**
-    cancellation of the main task. We'll simply resume the Generator with a Cancel
-  **/
+   * 取消 main task
+   */
   function cancelMain() {
+    // 正在运行 && 没有被取消
     if (mainTask.isRunning && !mainTask.isCancelled) {
       mainTask.isCancelled = true;
       next(TASK_CANCEL);
@@ -272,6 +370,12 @@ export default function proc(
 
     Cancellation is noop for terminated/Cancelled tasks tasks
   **/
+
+  /**
+   * 取消任务
+   *
+   * 1. 取消所有正在
+   */
   function cancel() {
     /**
       We need to check both Running and Cancelled status
@@ -279,7 +383,10 @@ export default function proc(
     **/
     if (iterator._isRunning && !iterator._isCancelled) {
       iterator._isCancelled = true;
+
+      // 取消所有子任务
       taskQueue.cancelAll();
+
       /**
         Ending with a Never result will propagate the Cancellation to all joiners
       **/
@@ -307,6 +414,12 @@ export default function proc(
     It's a recursive async/continuation function which calls itself
     until the generator terminates or throws
   **/
+
+  /**
+   * 执行 generator
+   * @param {Object} [arg] 动作标志,
+   * @param {Boolean} [isErr=false] 是否发生了错误
+   */
   function next(arg, isErr) {
     // Preventive measure. If we end up here, then there is really something wrong
     if (!mainTask.isRunning) {
@@ -315,21 +428,23 @@ export default function proc(
 
     try {
       let result;
+
       if (isErr) {
+        // 发生错误, 通知generator内部
         result = iterator.throw(arg);
       } else if (arg === TASK_CANCEL) {
         /**
-          getting TASK_CANCEL automatically cancels the main task
-          We can get this value here
+         * 实现取消操作
+         */
 
-          - By cancelling the parent task manually
-          - By joining a Cancelled task
-        **/
+        // 将mainTask 标记为取消
         mainTask.isCancelled = true;
+
         /**
           Cancels the current effect; this will propagate the cancellation down to any called tasks
         **/
         next.cancel();
+
         /**
           If this Generator has a `return` method then invokes it
           This will jump to the finally block
@@ -843,17 +958,31 @@ export default function proc(
    * 创建新的任务
    * @param {Number} id 任务ID ( saga ID )
    * @param {String} name 任务名称
-   * @param {Iterator} iterator
+   * @param {SagaIterator} iterator
    * @param {} cont
    */
   function newTask(id, name, iterator, cont) {
     iterator._deferredEnd = null;
 
-    // 创建一个任务
     return {
+      /**
+       * 任务标志
+       */
       [TASK]: true,
+
+      /**
+       * 任务ID - 用来标志task属于哪一个saga
+       */
       id,
+
+      /**
+       * 任务名
+       */
       name,
+
+      /**
+       *
+       */
       get done() {
         if (iterator._deferredEnd) {
           return iterator._deferredEnd.promise;
@@ -868,14 +997,56 @@ export default function proc(
           return def.promise;
         }
       },
+
+      /**
+       *
+       */
       cont,
+
+      /**
+       *
+       */
       joiners: [],
+
+      /**
+       * 任务取消操作
+       */
       cancel,
+
+      /**
+       * 是否正在运行
+       * @returns {Boolean}
+       */
       isRunning: () => iterator._isRunning,
+
+      /**
+       * 是否已经取消
+       * @returns {Boolean}
+       */
       isCancelled: () => iterator._isCancelled,
+
+      /**
+       * 是否已经终止
+       * @returns {Boolean}
+       */
       isAborted: () => iterator._isAborted,
+
+      /**
+       * 获得执行结果
+       * @returns {Any}
+       */
       result: () => iterator._result,
+
+      /**
+       * 获得执行过程中产生的错误对象
+       * @returns {Error}
+       */
       error: () => iterator._error,
+
+      /**
+       * 设置Task的上下文 ( 以merge的方式 )
+       * @param {Object} props
+       */
       setContext(props) {
         check(props, is.object, createSetContextWarning("task", props));
         object.assign(taskContext, props);
