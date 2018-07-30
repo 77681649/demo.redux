@@ -10,7 +10,7 @@
       "name": "debug.redux.saga.example",
       "cwd": "${workspaceFolder}/src/redux-saga/examples",
       "program": "${workspaceFolder}/src/redux-saga/examples/index.js",
-      "args": ["--n=1"]
+      "args": ["effects/4"]
     }
   ]
 }

@@ -27,6 +27,7 @@ import { buffers } from "./buffers";
  * @typedef MainTask
  * @property {String} name 主任务名称
  * @property {Function} cancel 取消函数
+ * @proprety {Boolean} [isMainRunning] 整个generator是否执行完毕
  * @property {Boolean} [isRunning=true] 是否正在运行
  * @property {Boolean} [isCancelled=false] 是否已经被取消
  * @property {Function} cont
@@ -41,7 +42,7 @@ import { buffers } from "./buffers";
  * @typedef SagaIterator
  * @property {any} _result 获得执行结果
  * @property {Error} _error 获得执行过程中产生的错误对象
- * @property {Promise} _deferredEnd
+ * @property {Promise} _deferredEnd 执行Promise回调函数
  * @property {Boolean} _isRunning 是否正在运行
  * @property {Boolean} _isCancelled 是否已经被取消
  * @property {Boolean} _isAborted 是否已经被终止
@@ -62,15 +63,39 @@ export const TASK_CANCEL = {
 };
 
 const matchers = {
+  /**
+   * 通配 matcher
+   * @returns {Function}
+   */
   wildcard: () => kTrue,
+
+  /**
+   * 默认 matcher
+   * @returns {Function}
+   */
   default: pattern =>
     typeof pattern === "symbol"
       ? input => input.type === pattern
       : input => input.type === String(pattern),
+
+  /**
+   * 数组 matcher - "or"复合匹配
+   * @returns {Function}
+   */
   array: patterns => input => patterns.some(p => matcher(p)(input)),
+
+  /**
+   * 谓词 matcher
+   * @returns {Function}
+   */
   predicate: predicate => input => predicate(input)
 };
 
+/**
+ * 创建matcher
+ * @param {String|Function|Array|"*"} pattern 匹配模式
+ * @returns {Function} 返回一个matcher,用来在监听到action时, 匹配指定的action
+ */
 function matcher(pattern) {
   // prettier-ignore
   return (
@@ -211,7 +236,10 @@ function forkQueue(name, mainTask, cb) {
 
 /**
  *
- * @param {*} param0
+ * @param {Object} options 选项
+ * @param {Object} options.context
+ * @param {Function} options.fn
+ * @param {Array} options.args
  */
 function createTaskIterator({ context, fn, args }) {
   if (is.iterator(fn)) {
@@ -404,6 +432,7 @@ export default function proc(
   iterator._isRunning = true;
 
   // kicks up the generator
+  // 开始执行 generator
   next();
 
   // then return the task descriptor to the caller
@@ -417,11 +446,13 @@ export default function proc(
 
   /**
    * 执行 generator
-   * @param {Object} [arg] 动作标志,
+   * 它是一个直到generator终止(done=true)抛出异常才会结束的递归的异步&&可中断执行的函数
+   * @param {Object} [arg] 传递给generator的参数
    * @param {Boolean} [isErr=false] 是否发生了错误
    */
   function next(arg, isErr) {
     // Preventive measure. If we end up here, then there is really something wrong
+    // 如果试图执行一个已经完成的 main Task, 那么肯定是发生了异常
     if (!mainTask.isRunning) {
       throw new Error("Trying to resume an already finished generator");
     }
@@ -430,18 +461,22 @@ export default function proc(
       let result;
 
       if (isErr) {
-        // 发生错误, 通知generator内部
+        //
+        // 发生错误, 通知generator抛出异常
+        //
         result = iterator.throw(arg);
       } else if (arg === TASK_CANCEL) {
-        /**
-         * 实现取消操作
-         */
+        //
+        // 取消
+        //
 
         // 将mainTask 标记为取消
         mainTask.isCancelled = true;
 
         /**
           Cancels the current effect; this will propagate the cancellation down to any called tasks
+          ( 该方法在runEffect被挂载 )
+          取消当前正在执行的effect,
         **/
         next.cancel();
 
@@ -453,37 +488,57 @@ export default function proc(
           ? iterator.return(TASK_CANCEL)
           : { done: true, value: TASK_CANCEL };
       } else if (arg === CHANNEL_END) {
+        //
+        // channel 关闭 - 通知iterator执行结束
+        //
         // We get CHANNEL_END by taking from a channel that ended using `take` (and not `takem` used to trap End of channels)
         result = is.func(iterator.return) ? iterator.return() : { done: true };
       } else {
+        //
+        // 继续执行saga generator, 获得执行结果
+        //
         result = iterator.next(arg);
       }
 
       if (!result.done) {
+        // 如果iterator未执行完成, 那么说明有effect需要处理
         runEffect(result.value, parentEffectId, "", next);
       } else {
-        /**
-          This Generator has ended, terminate the main task and notify the fork queue
-        **/
+        // 标记generator 执行完成
         mainTask.isMainRunning = false;
+
+        // 通知队列, 任务完成
         mainTask.cont && mainTask.cont(result.value);
       }
     } catch (error) {
+      // 如果没有取消, 那么需要打印错误日志
       if (mainTask.isCancelled) {
         logError(error);
       }
+
+      // 标记generator 执行完成
       mainTask.isMainRunning = false;
+
+      // 通知队列, 任务完成
       mainTask.cont(error, true);
     }
   }
 
   /**
    *
+   * @param {Any} result
+   * @param {Boolean} isError 是否发生错误
    */
   function end(result, isErr) {
+    // 运行结束
     iterator._isRunning = false;
+
+    // 关闭channel
     stdChannel.close();
+
     if (!isErr) {
+      // 没有发生错误, 保存结果
+      // 执行回调函数
       iterator._result = result;
       iterator._deferredEnd && iterator._deferredEnd.resolve(result);
     } else {
@@ -493,6 +548,8 @@ export default function proc(
           configurable: true
         });
       }
+
+      //
       if (!task.cont) {
         if (result instanceof Error && onError) {
           onError(result);
@@ -500,49 +557,76 @@ export default function proc(
           logError(result);
         }
       }
+
       iterator._error = result;
       iterator._isAborted = true;
+
+      // 执行回调函数
       iterator._deferredEnd && iterator._deferredEnd.reject(result);
     }
+
+    // 通知队列, 任务完成
     task.cont && task.cont(result, isErr);
+
+    //
     task.joiners.forEach(j => j.cb(result, isErr));
+
+    //
     task.joiners = null;
   }
 
   /**
-   *
+   * 运行 effect
+   * @param {Object} effect
+   * @param {Number} parentEffectId
+   * @param {String} label
+   * @param {Function} cb effect执行完成之后的回调函数
    */
   function runEffect(effect, parentEffectId, label = "", cb) {
+    //
+    // 生成 effect id
+    //
     const effectId = nextEffectId();
+
     sagaMonitor &&
       sagaMonitor.effectTriggered({ effectId, parentEffectId, label, effect });
 
     /**
-      completion callback and cancel callback are mutually exclusive
-      We can't cancel an already completed effect
-      And We can't complete an already cancelled effectId
-    **/
+     * done 标识
+     * 执行"完成"回调函数和执行"取消"回调函数是互斥的操作
+     */
     let effectSettled;
 
-    // Completion callback passed to the appropriate effect runner
+    /**
+     * "完成"回调函数
+     * @param {Any} res 结果
+     * @param {Boolean} isErr 是否发生错误
+     */
     function currCb(res, isErr) {
       if (effectSettled) {
         return;
       }
 
       effectSettled = true;
+
       cb.cancel = noop; // defensive measure
+
       if (sagaMonitor) {
         isErr
           ? sagaMonitor.effectRejected(effectId, res)
           : sagaMonitor.effectResolved(effectId, res);
       }
+
       cb(res, isErr);
     }
+
     // tracks down the current cancel
     currCb.cancel = noop;
 
-    // setup cancellation logic on the parent cb
+    /**
+     * "取消"回调函数
+     * 将effect的"取消"逻辑安装到父级的cb, 方便父级取消时能取消当前effect
+     */
     cb.cancel = () => {
       // prevents cancelling an already completed effect
       if (effectSettled) {
@@ -550,16 +634,17 @@ export default function proc(
       }
 
       effectSettled = true;
+
       /**
-        propagates cancel downward
-        catch uncaught cancellations errors; since we can no longer call the completion
-        callback, log errors raised during cancellations into the console
-      **/
+       * 向下传播取消操作 - 取消子effect
+       *
+       */
       try {
         currCb.cancel();
       } catch (err) {
         logError(err);
       }
+
       currCb.cancel = noop; // defensive measure
 
       sagaMonitor && sagaMonitor.effectCancelled(effectId);
@@ -581,7 +666,11 @@ export default function proc(
       ATTENTION! calling cancel must have no effect on an already completed or cancelled effect
     **/
     let data;
+
     // prettier-ignore
+    //
+    // 根据effect的类型, 调用相关的函数运行effect
+    //
     return (
       // Non declarative effect
         is.promise(effect)                      ? resolvePromise(effect, currCb)
@@ -610,12 +699,13 @@ export default function proc(
   }
 
   /**
-   *
-   * @param {*} promise
-   * @param {*} cb
+   * 解析 Promise
+   * @param {Promise} promise promise
+   * @param {Function} cb 回调函数
    */
   function resolvePromise(promise, cb) {
     const cancelPromise = promise[CANCEL];
+
     if (is.func(cancelPromise)) {
       cb.cancel = cancelPromise;
     } else if (is.func(promise.abort)) {
@@ -623,6 +713,7 @@ export default function proc(
       // TODO: add support for the fetch API, whenever they get around to
       // adding cancel support
     }
+
     promise.then(cb, error => cb(error, true));
   }
 
@@ -644,35 +735,58 @@ export default function proc(
   }
 
   /**
+   * 运行 take effect
+   * subscribe 指定channel中匹配指定pattern的input
    *
+   * @param {Object} args 参数
+   * @param {Object} args.channel 通信渠道
+   * @param {String|Array} args.pattern 匹配规则
+   * @param {Boolean} args.maybe
+   * @param {Function} cb 回调函数
    */
   function runTakeEffect({ channel, pattern, maybe }, cb) {
+    // 1. 设置渠道, 默认为stdChannel
     channel = channel || stdChannel;
+
+    // prettier-ignore
     const takeCb = inp =>
       inp instanceof Error
-        ? cb(inp, true)
-        : isEnd(inp) && !maybe
-          ? cb(CHANNEL_END)
+        ? cb(inp, true)           // 发生错误
+        : isEnd(inp) && !maybe    // maybe = true, 不会终止saga
+          ? cb(CHANNEL_END)       // channel is end
           : cb(inp);
+
     try {
+      //
       channel.take(takeCb, matcher(pattern));
     } catch (err) {
       return cb(err, true);
     }
+
     cb.cancel = takeCb.cancel;
   }
 
   /**
+   * 运行 put effect
+   * 发送action
+   * 1. channel为空, 向store发送一个action
+   * 2. channel非空, 向channel发送一个action
    *
+   * @param {Object} args 参数
+   * @param {Object} args.channel 通信渠道
+   * @param {String|Array} args.action action
+   * @param {Boolean} args.resolve
+   * @param {Function} cb 回调函数
    */
   function runPutEffect({ channel, action, resolve }, cb) {
     /**
-      Schedule the put in case another saga is holding a lock.
-      The put will be executed atomically. ie nested puts will execute after
-      this put has terminated.
-    **/
+     * put 操作
+     * 必须以"原子性"的方式执行 FIFO
+     * 即嵌套的put必须在等parent put执行完之后再执行
+     */
     asap(() => {
       let result;
+
       try {
         result = (channel ? channel.put : dispatch)(action);
       } catch (error) {
@@ -681,6 +795,7 @@ export default function proc(
         logError(error);
       }
 
+      // 以异步的方式处理
       if (resolve && is.promise(result)) {
         resolvePromise(result, cb);
       } else {

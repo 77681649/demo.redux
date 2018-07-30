@@ -61,15 +61,15 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 /**
- * 创建一个渠道(消息分发中心), 负责接收(put)消息,并将接收到的消息分发给何时的接受者(taker)
- * @param {Buffer} buffer 缓冲区
+ * 创建一个通信渠道
+ * @param {Buffer} buffer 缓冲区队列FIFO - 当没有消费者(taker)时, 负责暂存消息
  * @returns {}
  */
 export function channel(buffer = buffers.fixed()) {
-  // 是否已经关闭
+  // channel 是否已经关闭,
   let closed = false;
 
-  // taker等待队列(饥渴的消费者), 等待何时的消息到来
+  // taker pending队列(饥渴的消费者)
   let takers = [];
 
   // assert buffer
@@ -79,23 +79,26 @@ export function channel(buffer = buffers.fixed()) {
    * 断言 是否是不可访问的状态
    */
   function checkForbiddenStates() {
-    // 存在接受者的情况下, 不能关闭通信渠道
+    // 1. 如果还有等待接收消息的taker时, 不能关闭channel
     if (closed && takers.length) {
       throw internalErr("Cannot have a closed channel with pending takers");
     }
 
-    //
+    // 2. 不能存在无法消费的情况 (缓冲区有input, 但是有pending taker)
     if (takers.length && !buffer.isEmpty()) {
       throw internalErr("Cannot have pending takers with non empty buffer");
     }
   }
 
   /**
-   * 存 - 输入消息(生产消息), 将消息放入缓冲区
-   * @param {Object} input 输入的消息
+   * 输入 - input -> channel
+   * @param {Object} input 输入
    */
   function put(input) {
+    // 检查状态
     checkForbiddenStates();
+
+    // 断言
     check(input, is.notUndef, UNDEFINED_INPUT_ERROR);
 
     // 渠道关闭时, 忽略put操作
@@ -103,70 +106,89 @@ export function channel(buffer = buffers.fixed()) {
       return;
     }
 
-    // 没有taker, 将消息暂存到缓冲区, 等待taker来消费
+    //
+    // 如果没有消费者(taker), 那么将input暂存到缓冲区, 等待消费者(taker)读取
+    //
     if (!takers.length) {
       return buffer.put(input);
     }
 
     //
-    // 处理等待中的taker
+    // 如果 有消费者(taker)
+    // 那么 flush pending taker queue - 将input分发给消费者(taker)
     //
     for (var i = 0; i < takers.length; i++) {
       const cb = takers[i];
 
-      // 检查macher, 找出合适的taker, 对input进行消费
+      // 如果需要匹配, 那么只会将input分发给匹配上的消费者(taker)
       if (!cb[MATCH] || cb[MATCH](input)) {
-        // 将taker从等待队列中移除
+        // 从pending队列中移除
         takers.splice(i, 1);
+
+        // 消费
         return cb(input);
       }
     }
   }
 
   /**
-   * 取 - 消费消息
-   * @param {Function} cb 回调函数
+   * 输出单个input - channel -> input -> taker
+   * @param {Function} cb 消费者 (input:Object)=>void
    */
   function take(cb) {
+    // 检查状态
     checkForbiddenStates();
+
+    // 断言消费者是否是一个函数
     check(cb, is.func, "channel.take's callback must be a function");
 
     if (closed && buffer.isEmpty()) {
+      // channel end
       // 消费完毕时关闭, 发出 "CHANNEL_END"
       cb(END);
     } else if (!buffer.isEmpty()) {
-      // 缓冲区非空(有待消费的消息), 直接从缓冲区中消费
+      // 有待消费的input - 以FIFO的方式消费缓冲区的中数据
       cb(buffer.take());
     } else {
-      // 缓冲区为空时, 将taker加入等待队列,等到新的消息到达
+      // 无待消费的input - 将taker插入pending队列, 等到消息到达
       takers.push(cb);
 
-      // 包装cancel函数
+      // 创建 cancel pending函数
       cb.cancel = () => remove(takers, cb);
     }
   }
 
   /**
-   * 清空渠道中的Action
-   * @param {Function} cb 回调函数 (flushedItem:any)=>void
+   * 输出所有iput
+   * @param {Function} cb 消费者 (inputs:Object[])=>void
    */
   function flush(cb) {
+    // 检查状态
     checkForbiddenStates(); // TODO: check if some new state should be forbidden now
+
     check(cb, is.func, "channel.flush' callback must be a function");
+
+    // 消费完毕时关闭, 发出 "CHANNEL_END"
     if (closed && buffer.isEmpty()) {
       cb(END);
       return;
     }
+
+    // 消费缓冲区中所有的input
     cb(buffer.flush());
   }
 
   /**
-   * 关闭渠道
+   * 关闭渠道 - 关闭之后, 就不能进行take,put操作
    */
   function close() {
+    // 检查状态
     checkForbiddenStates();
+
     if (!closed) {
       closed = true;
+
+      // 通知taker
       if (takers.length) {
         const arr = takers;
         takers = [];
@@ -192,10 +214,10 @@ export function channel(buffer = buffers.fixed()) {
 }
 
 /**
- * 事件分发渠道 - 将订阅的事件分发给响应的消费者
+ * 创建自定应的事件通信渠道 - 将订阅的事件分发给响应的消费者
  * @param {Function} subscribe 消息订阅函数
- * @param {Buffer} [buffer=buffers.none()] 缓冲区, 默认不使用队列机制
- * @param {Function} matcher 匹配器
+ * @param {Buffer} [buffer=buffers.none()] 缓冲区, 默认不使用缓冲区,即先于taker之前的消息都会被丢弃
+ * @param {Function} matcher 消息匹配器, - 只有匹配时, 才会被channel处理
  */
 export function eventChannel(subscribe, buffer = buffers.none(), matcher) {
   /**
@@ -260,20 +282,22 @@ export function eventChannel(subscribe, buffer = buffers.none(), matcher) {
 }
 
 /**
+ * 标准的通信渠道
+ * 由创建saga-middleware时创建, 将中间件链接的store作为Observer( 如果有消息流过channel, 会通知它 )
  *
  * @param {Function} subscribe 消息订阅函数
  */
 export function stdChannel(subscribe) {
-  //
-  // 创建事件分发渠道
-  //
+  // 创建事件通信渠道
   const chan = eventChannel(cb =>
     subscribe(input => {
+      //
       if (input[SAGA_ACTION]) {
         cb(input);
         return;
       }
 
+      // 排队执行 taker
       asap(() => cb(input));
     })
   );
@@ -282,9 +306,9 @@ export function stdChannel(subscribe) {
     ...chan,
 
     /**
-     *
-     * @param {Function} cb
-     * @param {Function} matcher
+     * enhance taker - 支持taker自定义matcher
+     * @param {Function} cb 回调函数
+     * @param {Function} matcher 消费者自定义的matcher
      */
     take(cb, matcher) {
       if (arguments.length > 1) {

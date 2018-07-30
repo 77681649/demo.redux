@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { stringify } from "querystring";
 const {
   createStore,
   applyMiddleware,
@@ -8,7 +9,8 @@ const {
 } = require("../../../redux/src");
 const defaultReducer = (state, action) => state;
 const log = api => next => action => {
-  console.log(chalk.bgYellow("Dispatch:"), action);
+  console.log(chalk.bgYellow("Dispatch:"));
+  console.log("  ", action);
   return next(action);
 };
 
@@ -20,7 +22,7 @@ const withDiffLogger = () => createStore => (reducer, preload, enchaner) => {
     let nextState = store.getState();
 
     if (prevState != nextState) {
-      console.log(chalk.bgBlue("State Diff:"));
+      console.log(chalk.bgBlue(`State Diff:`));
 
       if (nextState === null) {
         console.log("nextState is null");
@@ -30,7 +32,7 @@ const withDiffLogger = () => createStore => (reducer, preload, enchaner) => {
       const keys = Object.keys(nextState);
 
       keys.forEach(key => {
-        if (prevState === null || prevState[key] != nextState[key]) {
+        if (prevState == null || prevState[key] != nextState[key]) {
           console.log(`  ${chalk.green(key)}:`, nextState[key]);
         }
       });
@@ -38,6 +40,11 @@ const withDiffLogger = () => createStore => (reducer, preload, enchaner) => {
 
     prevState = nextState;
   });
+
+  store.printState = function() {
+    console.log(chalk.bgMagenta("State Tree:"));
+    console.log(JSON.stringify(store.getState(), null, 2));
+  };
 
   return store;
 };

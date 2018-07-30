@@ -1,24 +1,30 @@
-import fsmIterator, { qEnd, safeName } from './fsmIterator'
-import { take, fork } from '../io'
-import { END } from '../channel'
+import fsmIterator, { qEnd, safeName } from "./fsmIterator";
+import { take, fork } from "../io";
+import { END } from "../channel";
 
+/**
+ *
+ * @param {String} patternOrChannel
+ * @param {*} worker
+ * @param {*} args
+ */
 export default function takeEvery(patternOrChannel, worker, ...args) {
-  const yTake = { done: false, value: take(patternOrChannel) }
-  const yFork = ac => ({ done: false, value: fork(worker, ...args, ac) })
+  const yTake = { done: false, value: take(patternOrChannel) };
+  const yFork = ac => ({ done: false, value: fork(worker, ...args, ac) });
 
   let action,
-    setAction = ac => (action = ac)
+    setAction = ac => (action = ac);
 
   return fsmIterator(
     {
       q1() {
-        return ['q2', yTake, setAction]
+        return ["q2", yTake, setAction];
       },
       q2() {
-        return action === END ? [qEnd] : ['q1', yFork(action)]
-      },
+        return action === END ? [qEnd] : ["q1", yFork(action)];
+      }
     },
-    'q1',
-    `takeEvery(${safeName(patternOrChannel)}, ${worker.name})`,
-  )
+    "q1",
+    `takeEvery(${safeName(patternOrChannel)}, ${worker.name})`
+  );
 }

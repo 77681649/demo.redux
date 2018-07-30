@@ -38,7 +38,7 @@ function ringBuffer(limit = 10, overflowAction) {
   };
 
   /**
-   * 出栈(从头部)
+   * 出队(从头部)
    */
   const take = () => {
     if (length != 0) {

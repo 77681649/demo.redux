@@ -35,10 +35,10 @@ const TEST_HINT =
   "\n(HINT: if you are getting this errors in tests, consider using createMockTask from redux-saga/utils)";
 
 /**
- *
- * @param {String} type
- * @param {Any} payload
- * @returns {Effect}
+ * 创建一个effect描述信息, 用来为最终的effect运行提供必要的数据
+ * @param {String} type effect的类型
+ * @param {Any} payload effect的有效负荷
+ * @returns {Object} 返回一个effect描述信息对象
  */
 const effect = (type, payload) => ({ [IO]: true, [type]: payload });
 
@@ -53,8 +53,20 @@ export const detach = eff => {
 };
 
 /**
+ * effect take
+ * 创建一个effect描述信息:
+ * 用来命令middleware subscribe 指定channel中匹配指定pattern的input
  *
- * @param {String|Channel} patternOrChannel
+ * pattern
+ * "*"          匹配所有发起的action
+ * string       匹配指定的action.type action
+ * function     (action)=>boolean, 匹配返回true的action
+ * array        匹配数组项中的任意规则
+ *
+ * channel
+ * 匹配来自指定channel的消息
+ *
+ * @param {String|Function|(String|Function)[]|Channel} patternOrChannel
  */
 export function take(patternOrChannel = "*") {
   if (arguments.length) {
@@ -64,12 +76,15 @@ export function take(patternOrChannel = "*") {
       "take(patternOrChannel): patternOrChannel is undefined"
     );
   }
+
   if (is.pattern(patternOrChannel)) {
     return effect(TAKE, { pattern: patternOrChannel });
   }
+
   if (is.channel(patternOrChannel)) {
     return effect(TAKE, { channel: patternOrChannel });
   }
+
   throw new Error(
     `take(patternOrChannel): argument ${String(
       patternOrChannel
@@ -77,6 +92,9 @@ export function take(patternOrChannel = "*") {
   );
 }
 
+/**
+ *
+ */
 take.maybe = (...args) => {
   const eff = take(...args);
   eff[TAKE].maybe = true;
@@ -88,6 +106,15 @@ export const takem = deprecate(
   updateIncentive("takem", "take.maybe")
 );
 
+/**
+ * effect put
+ * 创建一个effect描述信息:
+ * 用来命令 middleware
+ *  1. channel为空, 向store发送一个action
+ *  2. channel非空, 向channel发送一个action
+ * @param {Object} channel 通信渠道
+ * @param {Object} action action
+ */
 export function put(channel, action) {
   if (arguments.length > 1) {
     check(
@@ -110,9 +137,14 @@ export function put(channel, action) {
     action = channel;
     channel = null;
   }
+
   return effect(PUT, { channel, action });
 }
 
+/**
+ * effect put.resolve
+ * @param {*} args
+ */
 put.resolve = (...args) => {
   const eff = put(...args);
   eff[PUT].resolve = true;
@@ -149,18 +181,32 @@ function getFnCallDesc(meth, fn, args) {
   return { context, fn, args };
 }
 
+/**
+ *
+ * @param {*} fn
+ * @param {*} args
+ */
 export function call(fn, ...args) {
   return effect(CALL, getFnCallDesc("call", fn, args));
 }
 
+/**
+ *
+ */
 export function apply(context, fn, args = []) {
   return effect(CALL, getFnCallDesc("apply", { context, fn }, args));
 }
 
+/**
+ *
+ */
 export function cps(fn, ...args) {
   return effect(CPS, getFnCallDesc("cps", fn, args));
 }
 
+/**
+ *
+ */
 export function fork(fn, ...args) {
   return effect(FORK, getFnCallDesc("fork", fn, args));
 }
@@ -280,6 +326,11 @@ export function throttle(ms, pattern, worker, ...args) {
   return fork(throttleHelper, ms, pattern, worker, ...args);
 }
 
+/**
+ * 工厂方法 - 创建一个判断指定effect type的函数
+ * @param {String} type effect type
+ * @returns {Function} 返回一个用于判断effect type 类型的函数
+ */
 const createAsEffectType = type => effect =>
   effect && effect[IO] && effect[type];
 
