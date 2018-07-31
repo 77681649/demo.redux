@@ -214,10 +214,13 @@ export function channel(buffer = buffers.fixed()) {
 }
 
 /**
+ * 工厂函数
  * 创建自定应的事件通信渠道 - 将订阅的事件分发给响应的消费者
- * @param {Function} subscribe 消息订阅函数
+ * 
+ * @param {Function} subscribe 消息订阅函数 - 初始化外部的事件来源
  * @param {Buffer} [buffer=buffers.none()] 缓冲区, 默认不使用缓冲区,即先于taker之前的消息都会被丢弃
  * @param {Function} matcher 消息匹配器, - 只有匹配时, 才会被channel处理
+ * @returns {Object} 返回创建的channel对象
  */
 export function eventChannel(subscribe, buffer = buffers.none(), matcher) {
   /**
@@ -245,7 +248,11 @@ export function eventChannel(subscribe, buffer = buffers.none(), matcher) {
   };
 
   /**
-   * 添加一个事件订阅者
+   * 订阅 store action
+   * 当dispatch action,会有如下操作:
+   *  1. 检查是不是接收到 CHANNEL_END -> YES close channel
+   *  2. 检查是否是关注的input
+   *  3. channel.put(input)
    */
   const unsubscribe = subscribe(input => {
     // 接收到"CHANNEL_END" , 关闭渠道
@@ -286,6 +293,7 @@ export function eventChannel(subscribe, buffer = buffers.none(), matcher) {
  * 由创建saga-middleware时创建, 将中间件链接的store作为Observer( 如果有消息流过channel, 会通知它 )
  *
  * @param {Function} subscribe 消息订阅函数
+ * @returns {Object} 返回创建的channel对象
  */
 export function stdChannel(subscribe) {
   // 创建事件通信渠道

@@ -183,19 +183,39 @@ export function autoInc(seed = 0) {
  */
 export const uid = autoInc();
 
+/**
+ * 常量函数 throw(err)
+ */
 const kThrow = err => {
   throw err;
 };
+
+/**
+ * 常量函数 return(value)
+ * @param {*} value 
+ */
 const kReturn = value => ({ value, done: true });
+
+/**
+ * 制造一个Iterator对象
+ * @param {Function} next iterator.next 行为
+ * @param {Function} thro iterator.throw 行为
+ * @param {String} name 名称
+ * @param {Boolean} isHelper 是否是帮助函数
+ * @returns {Iterator} 返回创建好的iterator对象
+ */
 export function makeIterator(next, thro = kThrow, name = "", isHelper) {
   const iterator = { name, next, throw: thro, return: kReturn };
 
   if (isHelper) {
     iterator[HELPER] = true;
   }
+  
+  // 创建一个Iterator生成函数
   if (typeof Symbol !== "undefined") {
     iterator[Symbol.iterator] = () => iterator;
   }
+  
   return iterator;
 }
 

@@ -11,6 +11,7 @@
     "symbol-observable": "^1.2.0"
   },
   "devDependencies": {
+    "babel-plugin-transform-es2015-modules-commonjs": "^6.26.2",
     "babel-plugin-transform-object-rest-spread": "^6.26.0"
   }
 }

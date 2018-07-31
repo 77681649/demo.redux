@@ -67,6 +67,7 @@ export const detach = eff => {
  * 匹配来自指定channel的消息
  *
  * @param {String|Function|(String|Function)[]|Channel} patternOrChannel
+ * @returns {Object} 返回一个effect plain object
  */
 export function take(patternOrChannel = "*") {
   if (arguments.length) {
@@ -114,6 +115,7 @@ export const takem = deprecate(
  *  2. channel非空, 向channel发送一个action
  * @param {Object} channel 通信渠道
  * @param {Object} action action
+ * @returns {Object} 返回一个effect plain object
  */
 export function put(channel, action) {
   if (arguments.length > 1) {
@@ -144,6 +146,7 @@ export function put(channel, action) {
 /**
  * effect put.resolve
  * @param {*} args
+ * @returns {Object} 返回一个effect plain object
  */
 put.resolve = (...args) => {
   const eff = put(...args);
@@ -162,50 +165,75 @@ export function race(effects) {
 }
 
 /**
- *
+ * 获得函数调用的描述对象
+ * @param {String} meth 方法名
+ * @param {Function} fn 函数
+ * @param {any[]} ...args 函数参数
+ * @returns {Object} 返回一个effect plain object
  */
 function getFnCallDesc(meth, fn, args) {
   check(fn, is.notUndef, `${meth}: argument fn is undefined`);
 
   let context = null;
+  
   if (is.array(fn)) {
     [context, fn] = fn;
   } else if (fn.fn) {
     ({ context, fn } = fn);
   }
+
   if (context && is.string(fn) && is.func(context[fn])) {
     fn = context[fn];
   }
+
   check(fn, is.func, `${meth}: argument ${fn} is not a function`);
 
   return { context, fn, args };
 }
 
 /**
- *
- * @param {*} fn
- * @param {*} args
+ * effect call
+ * 创建一个effect描述信息:
+ * 用来命令middleware 以参数args调用函数fn
+ * @param {Function|Array|Object} fn 函数, 支持[context,fn]或者{ fn:{context,fn} } 的传参格式
+ * @param {any[]} ...args 函数参数
+ * @returns {Object} 返回一个effect plain object
  */
 export function call(fn, ...args) {
   return effect(CALL, getFnCallDesc("call", fn, args));
 }
 
 /**
- *
+ * effect apply
+ * 创建一个effect描述信息:
+ * 用来命令middleware 以参数args调用函数fn
+ * @param {Object} context 上下文对象
+ * @param {Function|Array|Object} fn 函数, 支持[context,fn]或者{ fn:{context,fn} } 的传参格式
+ * @param {any[]} args 函数参数
+ * @returns {Object} 返回一个effect plain object
  */
 export function apply(context, fn, args = []) {
   return effect(CALL, getFnCallDesc("apply", { context, fn }, args));
 }
 
 /**
- *
+ * effect cps
+ * 创建一个effect描述信息:
+ * 用来命令middleware 以Node风格的函数的方式调用fn (在参数中追加一个callback, 用来结束函数执行)
+ * @param {Object} context 上下文对象
+ * @param {Function|Array|Object} fn 函数, 支持[context,fn]或者{ fn:{context,fn} } 的传参格式
+ * @param {any[]} args 函数参数
+ * @returns {Object} 返回一个effect plain object
  */
 export function cps(fn, ...args) {
   return effect(CPS, getFnCallDesc("cps", fn, args));
 }
 
 /**
- *
+ * 
+ * @param {Function} fn 
+ * @param {Any[]} ...args
+ * @returns {Object} 返回一个effect plain object
  */
 export function fork(fn, ...args) {
   return effect(FORK, getFnCallDesc("fork", fn, args));
@@ -264,10 +292,13 @@ export function select(selector, ...args) {
 }
 
 /**
- * creates an event channel for store actions
- * @params {String} pattern
- * @params {Buffer} buffer
- * @returns {}
+ * effect actionChannel
+ * 创建一个effect描述信息:
+ * 用来命令 middleware 当接受到匹配pattern的action时, 使用创建的eventChannel进行队列式无阻塞I/O操作
+ * 
+ * @params {String} pattern 匹配模式
+ * @params {Buffer} buffer 缓冲区对象
+ * @returns {Object} 返回一个effect plain object
  */
 export function actionChannel(pattern, buffer) {
   check(
@@ -275,6 +306,7 @@ export function actionChannel(pattern, buffer) {
     is.notUndef,
     "actionChannel(pattern,...): argument pattern is undefined"
   );
+
   if (arguments.length > 1) {
     check(
       buffer,
@@ -314,14 +346,30 @@ export function setContext(props) {
   return effect(SET_CONTEXT, props);
 }
 
+/**
+ * 
+ * @param {*} patternOrChannel 
+ * @param {*} worker 
+ * @param {*} args 
+ */
 export function takeEvery(patternOrChannel, worker, ...args) {
   return fork(takeEveryHelper, patternOrChannel, worker, ...args);
 }
 
+/**
+ * 
+ */
 export function takeLatest(patternOrChannel, worker, ...args) {
   return fork(takeLatestHelper, patternOrChannel, worker, ...args);
 }
 
+/**
+ * 
+ * @param {*} ms 
+ * @param {*} pattern 
+ * @param {*} worker 
+ * @param {*} args 
+ */
 export function throttle(ms, pattern, worker, ...args) {
   return fork(throttleHelper, ms, pattern, worker, ...args);
 }

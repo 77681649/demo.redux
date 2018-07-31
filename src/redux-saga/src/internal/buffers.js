@@ -11,7 +11,7 @@ const zeroBuffer = { isEmpty: kTrue, put: noop, take: noop };
 
 /**
  * 创建一个缓冲区, 存储结构为循环队列 ( 先进先出 FIFO )
- * @param {Number} limit 最大长度
+ * @param {Number} [limit=10] 最大长度
  * @param {Number} overflowAction 移除之后的动作
  * @returns {Buffer} 返回创建的缓冲区
  */

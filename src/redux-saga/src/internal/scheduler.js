@@ -1,6 +1,8 @@
 /**
  * 任务调度器
- * 将负责调度的task按FIFO的顺序以"原子性"(同一时刻,只能执行一个task)的方式依次的同步执行
+ * 将负责调度的task: 
+ *  1. 队列中的task, 按FIFO的顺序依次执行
+ *  2. task执行具有"原子性": 同一时刻, 只会有一个task再执行
  */
 
 const queue = [];
@@ -20,7 +22,7 @@ let semaphore = 0;
  */
 function exec(task) {
   try {
-    // 添加锁
+    // lock, 防止其他task无法执行
     suspend();
     task();
   } finally {

@@ -108,45 +108,88 @@ function matcher(pattern) {
 }
 
 /**
-  Used to track a parent task and its forks
-  In the new fork model, forked tasks are attached by default to their parent
-  We model this using the concept of Parent task && main Task
-  main task is the main flow of the current Generator, the parent tasks is the
-  aggregation of the main tasks + all its forked tasks.
-  Thus the whole model represents an execution tree with multiple branches (vs the
-  linear execution tree in sequential (non parallel) programming)
-
-  A parent tasks has the following semantics
-  - It completes if all its forks either complete or all cancelled
-  - If it's cancelled, all forks are cancelled as well
-  - It aborts if any uncaught error bubbles up from forks
-  - If it completes, the return value is the one returned by the main task
-**/
-
-/**
- * 创建pending队列
+ * 创建fork queue
+ * 用来追踪parentTasks - 即可追踪mainTask和它的forkTask的状态信息
+ *
+ * Task 执行模型
+ *
+ * 概念:
+ * MainTask     主任务    它是当前generator对象的主流程( 执行流程 )
+ * ForkTask     子任务    它是MainTask的分支任务, 通过fork/spawn effect生成
+ * ParentTask   父任务    它是MainTask + ForkTask的集合( 统称为forks )
+ *
+ * 说明:
+ * 它是一个多分支的执行树.
+ *
+ * ParentTask的行为:
+ *  - ParentTask完成的前提: 它的所有forks完成或被取消
+ *  - ParentTask终止的原因: 有未捕获的错误从forks冒泡上来
+ *
+ *  - 如果ParentTask已完成, 那么 回调函数的返回值是mainTask返回的值
+ *  - 如果ParentTask被取消, 那么 所有的forks都会被取消
+ *
+ * @example
+ * //
+ * // execution tree:
+ * //   rootSaga
+ * //     |
+ * //   checkLoginStatusSaga
+ * //     |
+ * //   requestCheckLogin
+ * function* rootSaga(){
+ *    // main flow start
+ *    while(true){
+ *      const {username,password} yield take("LOGIN")
+ *
+ *      try {
+ *        const result = yield call(requestLogin,username,password)
+ *
+ *        if(result){
+ *          yield put({type:"LOGIN_SUCCESS"})
+ *          yield fork(checkLoginStatusSaga)        // fork
+ *        } else {
+ *          yield put({type:"LOGIN_FAIL"})
+ *        }
+ *      } catch(err){
+ *        yield put({type:"LOGIN_ERROR", err})
+ *      }
+ *    }
+ *    // main flow end
+ * }
+ *
+ * function* checkLoginStatusSaga(){
+ *    while(true){
+ *      yield delay(60 * 1000)
+ *      yield fork(requestCheckLogin)             // fork
+ *    }
+ * }
+ *
  *  1. 负责管理fork task
  *  2. 负责在main task && fork task执行完成之后, 调用cb返回结果
  * @param {String} name 队列的名称
  * @param {MainTask} mainTask 主任务对象
  * @param {Function} [cb] 当队列中的任务执行完成或者被终止时调用 (res:Error|any,isErr:Boolean)
- * @returns {Object} 返回队列对象
+ * @returns {Object} 返回一个队列对象 {addTask, cancelAll, abort}
  */
 function forkQueue(name, mainTask, cb) {
-  let tasks = [], // pending tasks
-    result, // 最终的结果
-    completed = false; // 是否执行完毕
+  // 存储forks
+  let tasks = [];
 
-  //
-  // 将mainTask添加到队列中
-  //
+  // parentTask 结果
+  let result;
+
+  // parentTask 是否完成
+  let completed = false;
+
+  // 将mainTask作为第一个fork, 添加到队列中
   addTask(mainTask);
 
   /**
-   * 终止 - 取消所有pending task && 返回结果
-   * @param {*} err
+   * 终止操作
+   * @param {Error} err
    */
   function abort(err) {
+    // 取消所有的forks
     cancelAll();
 
     // 调用回调函数
@@ -154,16 +197,17 @@ function forkQueue(name, mainTask, cb) {
   }
 
   /**
-   * 向队列中添加pending task
+   * 向parentTask, 添加fork
    * @param {MainTask|Task} task
    */
   function addTask(task) {
+    // 加入队列
     tasks.push(task);
 
     /**
-     * 任务完成
-     * @param {Any} res 运行结果
-     * @param {Boolean} isErr 运行过程中是否发生错误
+     * 任务完成时的回调函数
+     * @param {Any} res 执行结果
+     * @param {Boolean} isErr 是否发生错误
      */
     task.cont = (res, isErr) => {
       if (completed) {
@@ -173,13 +217,11 @@ function forkQueue(name, mainTask, cb) {
       // 从队列中删除
       remove(tasks, task);
 
-      // 断开连接 - 避免多次调用导致问题
+      // 防护措施 - 避免意外调用
       task.cont = noop;
 
       if (isErr) {
-        //
-        // 如果发生错误, 那么终止整个任务
-        //
+        // 终止
         abort(res);
       } else {
         // 如果是主任务完成, 将res作为最终的结果
@@ -187,7 +229,8 @@ function forkQueue(name, mainTask, cb) {
           result = res;
         }
 
-        // pending queue空, 将队列标记为完成
+        // 所有forks执行完毕, 那么parentTask执行完毕
+        // 通过回调函数, 通知调用方
         if (!tasks.length) {
           completed = true;
 
@@ -200,7 +243,7 @@ function forkQueue(name, mainTask, cb) {
   }
 
   /**
-   * 取消
+   * 取消操作 - 取消所有的forks
    */
   function cancelAll() {
     if (completed) {
@@ -210,8 +253,11 @@ function forkQueue(name, mainTask, cb) {
     completed = true;
 
     tasks.forEach(t => {
-      t.cont = noop;
-      t.cancel();
+      // 防护措施 - 防止被取消的函数还会被回调
+      t.cont = noop; 
+
+      // 取消任务
+      t.cancel();    
     });
 
     tasks = [];
@@ -235,20 +281,24 @@ function forkQueue(name, mainTask, cb) {
 }
 
 /**
- *
+ * 将fn包装为task iterator( 类 generator object )
+ * 方便后续将它作为一个saga处理
  * @param {Object} options 选项
- * @param {Object} options.context
- * @param {Function} options.fn
- * @param {Array} options.args
+ * @param {Object} options.context 执行的上下文
+ * @param {Function} options.fn 函数
+ * @param {Array} options.args 函数的参数
  */
 function createTaskIterator({ context, fn, args }) {
+  // 如果fn本身就是一个iterator, 跳过执行
   if (is.iterator(fn)) {
     return fn;
   }
 
   // catch synchronous failures; see #152 and #441
   let result, error;
+
   try {
+    // 执行fn, 获得结果
     result = fn.apply(context, args);
   } catch (err) {
     error = err;
@@ -263,14 +313,22 @@ function createTaskIterator({ context, fn, args }) {
   // instead create a failed task. See #152 and #441
   return error
     ? makeIterator(() => {
+        // 发生错误, 直接抛出
         throw error;
       })
     : makeIterator(
         (function() {
           let pc;
+
+          // effect
           const eff = { done: false, value: result };
+
+          // return()
           const ret = value => ({ done: true, value });
-          return arg => {
+
+          return function next(arg) {
+            // 第一次 next(): 返回effect 对象
+            // 第二次 next(): 返回将传递给next的参数, 作为最终的返回结果
             if (!pc) {
               pc = true;
               return eff;
@@ -286,7 +344,7 @@ const wrapHelper = helper => ({ fn: helper });
 
 /**
  * 创建并运行一个task
- * @param {Iterator} iterator saga 生成器对象
+ * @param {Iterator} iterator 迭代器对象( task iterator or saga iterator )
  * @param {Function} subscribe emitter.subscribe emitter 订阅函数
  * @param {Function} dispatch action
  * @param {Function} getState action
@@ -374,7 +432,7 @@ export default function proc(
   };
 
   //
-  // 创建一个 task queue
+  // 创建一个 task fork queue
   //
   const taskQueue = forkQueue(name, mainTask, end);
 
@@ -626,6 +684,8 @@ export default function proc(
     /**
      * "取消"回调函数
      * 将effect的"取消"逻辑安装到父级的cb, 方便父级取消时能取消当前effect
+     *
+     * 不同的effect可以自定义cancel逻辑
      */
     cb.cancel = () => {
       // prevents cancelling an already completed effect
@@ -699,7 +759,7 @@ export default function proc(
   }
 
   /**
-   * 解析 Promise
+   * 解析 Promise - 执行promise, 将最终的结果传递给回调函数
    * @param {Promise} promise promise
    * @param {Function} cb 回调函数
    */
@@ -718,7 +778,7 @@ export default function proc(
   }
 
   /**
-   *
+   * 解析Iterator - 创建并运行一个新任务
    */
   function resolveIterator(iterator, effectId, name, cb) {
     proc(
@@ -738,6 +798,8 @@ export default function proc(
    * 运行 take effect
    * subscribe 指定channel中匹配指定pattern的input
    *
+   * [阻塞] take 会阻塞后续代码的执行, 只有等到监听的消息触发时, 才会继续执行后续代码
+   *
    * @param {Object} args 参数
    * @param {Object} args.channel 通信渠道
    * @param {String|Array} args.pattern 匹配规则
@@ -749,6 +811,7 @@ export default function proc(
     channel = channel || stdChannel;
 
     // prettier-ignore
+    // 这里会等到有emit时,再继续执行iterator
     const takeCb = inp =>
       inp instanceof Error
         ? cb(inp, true)           // 发生错误
@@ -776,7 +839,7 @@ export default function proc(
    * @param {Object} args.channel 通信渠道
    * @param {String|Array} args.action action
    * @param {Boolean} args.resolve
-   * @param {Function} cb 回调函数
+   * @param {Function} cb 回调函数 (action:Object) -> void
    */
   function runPutEffect({ channel, action, resolve }, cb) {
     /**
@@ -806,16 +869,26 @@ export default function proc(
   }
 
   /**
-   *
+   * 运行 call effect
+   * 以参数args调用函数fn - 会自动处理promies,iterator
+   * @param {Object} args 参数
+   * @param {Object} args.context 上下文对象
+   * @param {String|Array} args.fn 调用函数, 可以是Generator Function or normal Function
+   * @param {Boolean} args.args 调用函数时传递的参数
+   * @param {Function} cb 回调函数 (result:any) -> void 返回执行结果
    */
   function runCallEffect({ context, fn, args }, effectId, cb) {
     let result;
+
     // catch synchronous failures; see #152
+    // 同步执行
     try {
       result = fn.apply(context, args);
     } catch (error) {
       return cb(error, true);
     }
+
+    // 处理结果
     return is.promise(result)
       ? resolvePromise(result, cb)
       : is.iterator(result)
@@ -824,7 +897,13 @@ export default function proc(
   }
 
   /**
+   * 运行 cps effect
    *
+   * @param {Object} args 参数
+   * @param {Object} args.context 上下文对象
+   * @param {String|Array} args.fn 调用函数, 可以是Generator Function or normal Function
+   * @param {Boolean} args.args 调用函数时传递的参数
+   * @param {Function} cb 回调函数 (result:any) -> void 返回执行结果
    */
   function runCPSEffect({ context, fn, args }, cb) {
     // CPS (ie node style functions) can define their own cancellation logic
@@ -832,8 +911,13 @@ export default function proc(
 
     // catch synchronous failures; see #152
     try {
+      // 创建cps callback
       const cpsCb = (err, res) => (is.undef(err) ? cb(res) : cb(err, true));
+
+      // 执行函数
       fn.apply(context, args.concat(cpsCb));
+
+      // 自定义cancel
       if (cpsCb.cancel) {
         cb.cancel = () => cpsCb.cancel();
       }
@@ -843,13 +927,24 @@ export default function proc(
   }
 
   /**
-   *
+   * 运行 fork effect
+   * @param {Object} args 参数
+   * @param {Object} args.context 上下文对象
+   * @param {String|Array} args.fn 调用函数, 可以是Generator Function or normal Function
+   * @param {Boolean} args.args 调用函数时传递的参数
+   * @param {Boolean} detached
+   * @param {Function} cb 回调函数 (result:any) -> void 返回执行结果
    */
   function runForkEffect({ context, fn, args, detached }, effectId, cb) {
+    // 创建一个task iterator
+    // 第一次 next(): 返回effect 对象
+    // 第二次 next(): 返回将传递给next的参数, 作为最终的返回结果
     const taskIterator = createTaskIterator({ context, fn, args });
 
     try {
       suspend();
+
+      // 创建一个任务
       const task = proc(
         taskIterator,
         subscribe,
@@ -1028,11 +1123,19 @@ export default function proc(
   }
 
   /**
+   * 运行 actionChannel effect
+   * 当接受到匹配pattern的action时, 使用创建的eventChannel进行队列式无阻塞I/O操作
    *
+   * @param {Object} args 参数
+   * @param {Object} args.pattern 匹配模式
+   * @param {String|Array} [args.buffer] channel使用的buffer, 默认为fixed()
+   * @param {Function} cb 回调函数 (channel:Object) -> void 参数为执行结果
    */
   function runChannelEffect({ pattern, buffer }, cb) {
     const match = matcher(pattern);
+
     match.pattern = pattern;
+
     cb(eventChannel(subscribe, buffer || buffers.fixed(), match));
   }
 

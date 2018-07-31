@@ -7,7 +7,10 @@ const {
   bindActionCreators,
   combineReducers
 } = require("../../../redux/src");
-const defaultReducer = (state, action) => state;
+const defaultReducer = (state, action) => {
+  let { type, ...payload } = action;
+  return payload || state;
+};
 const log = api => next => action => {
   console.log(chalk.bgYellow("Dispatch:"));
   console.log("  ", action);
@@ -49,24 +52,29 @@ const withDiffLogger = () => createStore => (reducer, preload, enchaner) => {
   return store;
 };
 
-function enchancedCreateStore(reducer, preloadState, enchancer) {
+function enchancedCreateStore(reducer, preloadedState, enhancer) {
   reducer = reducer || defaultReducer;
 
-  const defaultEnchncer = compose(
+  if (typeof preloadedState === "function" && typeof enhancer === "undefined") {
+    enhancer = preloadedState;
+    preloadedState = undefined;
+  }
+
+  const defaultEnhancer = compose(
     applyMiddleware(log),
     withDiffLogger()
   );
 
-  if (typeof enchancer === "function") {
-    enchancer = compose(
-      enchancer,
-      defaultEnchncer
+  if (typeof enhancer === "function") {
+    enhancer = compose(
+      enhancer,
+      defaultEnhancer
     );
   } else {
-    enchancer = defaultEnchncer;
+    enhancer = defaultEnhancer;
   }
 
-  const store = createStore(reducer, preloadState, enchancer);
+  const store = createStore(reducer, preloadedState, enhancer);
 
   // store.subscribe(function printNextState() {
   //   console.log("next state:");
