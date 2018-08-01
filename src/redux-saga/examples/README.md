@@ -30,3 +30,24 @@
 
 https://github.com/77681649/demo.redux/tree/master/src/redux-saga/src/internal/runSaga.js
 /Users/tyo/Documents/Codes/demo/demo.redux/src/redux-saga/src/internal/runSaga.js
+
+## helpers
+- [1: 使用takeEvery: 实现多次处理指定的action]()
+- [2: 使用takeEvery: 使用take,fork实现takeEvery的功能]()
+- [3: 使用takeLastest: 实现多次发起fetchUser时, 确保只有最后一个请求得到结果]()
+- [4: 使用takeLastest: 使用take,fork实现takeLastest的功能]()
+- [5: 使用throttle: 实现每隔5000ms,发起心跳检测的功能]()
+- [6: 使用throttle: 使用take,fork,delay实现throttle]()
+
+- [: 使用cancel: 实现取消功能]()
+- [: 使用cancel: 实现自定义的取消逻辑]()
+
+
+## combinator
+- [: 使用all: 实现并行执行多个effect的功能]()
+- [: 使用all:]()
+- [: 使用all:]()
+- [: 使用race: 实现请求超时的功能]()
+- [: 使用race: ]()
+- [: 使用race:]()
+

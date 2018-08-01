@@ -1,28 +1,61 @@
 /**
- * 9: 使用 fork: 以非阻塞的方式运行的函数, 内部的错误,外部无法通过 try..catch 捕获
+ * 9: 使用 join: 获得fork task的执行结果
  */
-import { store, runSaga, effects, takeEvery } from "../createStoreWithSaga";
-const { put, call, fork } = effects;
+import { store, runSaga, effects } from "../createStoreWithSaga";
+const { call, take, put, fork, join } = effects;
 
-function* saga() {
-  try {
-    yield fork(sagaChild);
-  } catch (err) {
-    console.log("throw err in saga", err);
+function ping() {
+  return new Promise(resolve => {
+    setTimeout(function() {
+      if (Math.random() > 0.3) {
+        resolve("ok");
+      } else {
+        resolve("error");
+      }
+    }, 2000);
+  });
+}
+
+/**
+ * saga
+ */
+function* rootSaga(x, y) {
+  // 发起ping
+  const pingTask = yield fork(pingSaga);
+
+  // 每次收到"request"相关的action时
+  // 先检查心跳连接是否正常
+  while (true) {
+    const action = yield take(function(input) {
+      return /^request_+/.test(input.type);
+    });
+
+    const pong = yield join(pingTask);
+    if (pong === "ok") {
+      yield call(requestSaga, action);
+    } else {
+      yield put({
+        type: "server_connecting_error"
+      });
+    }
   }
 }
 
-function* sagaChild() {
-  // 这种写法无法捕获, 会出现未捕获的错误
-  // yield Promise.reject(new Error("hahaha"));
-
-  // 在内部捕获错误
-  // 这种写法: 可以捕获
-  try {
-    yield Promise.reject(new Error("hahaha"));
-  } catch (err) {
-    console.log("throw err in sagaChild", err);
-  }
+function* pingSaga() {
+  return yield call(ping);
 }
 
-runSaga(saga);
+function* requestSaga(action) {
+  yield put({ type: "requesting" });
+}
+
+/**
+ * run saga
+ */
+runSaga(rootSaga);
+
+setInterval(function() {
+  store.dispatch({
+    type: "request_user"
+  });
+}, 2400);

@@ -10,7 +10,11 @@
       "name": "debug.redux.saga.example",
       "cwd": "${workspaceFolder}/src/redux-saga/examples",
       "program": "${workspaceFolder}/src/redux-saga/examples/index.js",
+<<<<<<< HEAD
       "args": ["effects/8"]
+=======
+      "args": ["helpers/1"]
+>>>>>>> 3894a33c014036592ef7d4bbec665c502707a39d
     }
   ]
 }
