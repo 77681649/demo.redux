@@ -254,10 +254,10 @@ function forkQueue(name, mainTask, cb) {
 
     tasks.forEach(t => {
       // 防护措施 - 防止被取消的函数还会被回调
-      t.cont = noop; 
+      t.cont = noop;
 
       // 取消任务
-      t.cancel();    
+      t.cancel();
     });
 
     tasks = [];
@@ -352,7 +352,7 @@ const wrapHelper = helper => ({ fn: helper });
  * @param {Object} options 选项
  * @param {Number} parentEffectId id
  * @param {String} name saga的名称
- * @param {} cont
+ * @param {Function} cont
  * @returns {Task}
  */
 export default function proc(
@@ -583,7 +583,7 @@ export default function proc(
   }
 
   /**
-   *
+   * 当generator中的所有任务执行完毕之后触发
    * @param {Any} result
    * @param {Boolean} isError 是否发生错误
    */
@@ -927,12 +927,12 @@ export default function proc(
   }
 
   /**
-   * 运行 fork effect
+   * 运行 fork effect ( 不能被取消 )
    * @param {Object} args 参数
    * @param {Object} args.context 上下文对象
    * @param {String|Array} args.fn 调用函数, 可以是Generator Function or normal Function
    * @param {Boolean} args.args 调用函数时传递的参数
-   * @param {Boolean} detached
+   * @param {Boolean} detached 是否detached task
    * @param {Function} cb 回调函数 (result:any) -> void 返回执行结果
    */
   function runForkEffect({ context, fn, args, detached }, effectId, cb) {
@@ -958,14 +958,30 @@ export default function proc(
       );
 
       if (detached) {
+        //
+        // detached task: 单独的task,与parent task无关
+        // - completed 与arent task无关
+        // - abort     与parent task无关
+        // - cancel    与parent task无关
+        //
         cb(task);
       } else {
         if (taskIterator._isRunning) {
+          // 如果 运行中(未结束
+          // 那么 添加到forks中
           taskQueue.addTask(task);
           cb(task);
         } else if (taskIterator._error) {
+          // 如果 发生错误
+          // 那么 终止运行 - 取消所有forks
           taskQueue.abort(taskIterator._error);
+
+          // 没有调用cb
+          // 因为, abort会调用 end
+          // 这里, 不调用是为了避免重复调用
         } else {
+          // 如果 运行结束
+          // 那么 只返回task
           cb(task);
         }
       }
@@ -976,7 +992,9 @@ export default function proc(
   }
 
   /**
-   *
+   * 运行 join effect
+   * @param {Task} t
+   * @param {Function} cb 回调函数 (result:any) -> void 返回执行结果
    */
   function runJoinEffect(t, cb) {
     if (t.isRunning()) {
@@ -995,9 +1013,11 @@ export default function proc(
     if (taskToCancel === SELF_CANCELLATION) {
       taskToCancel = task;
     }
+
     if (taskToCancel.isRunning()) {
       taskToCancel.cancel();
     }
+
     cb();
     // cancel effects are non cancellables
   }
@@ -1199,19 +1219,28 @@ export default function proc(
       name,
 
       /**
-       *
+       * 获得最终的结果, 返回一个Promise
+       * @returns {Promise}
        */
       get done() {
         if (iterator._deferredEnd) {
+          // 返回promise
           return iterator._deferredEnd.promise;
         } else {
+          // 创建def对象
           const def = deferred();
+
+          // 设置def对象, 当task执行完毕之后, 会调用resolve/reject方法 传递结果给task对象
           iterator._deferredEnd = def;
+
+          // 如果运行已经结束, 那么立即返回结果
           if (!iterator._isRunning) {
             iterator._error
               ? def.reject(iterator._error)
               : def.resolve(iterator._result);
           }
+
+          // 返回 promise
           return def.promise;
         }
       },

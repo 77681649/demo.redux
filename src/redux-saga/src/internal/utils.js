@@ -123,13 +123,20 @@ export const array = {
   }
 };
 
+/**
+ * 包装一个 deferred对象
+ * @returns {Defferred}
+ */
 export function deferred(props = {}) {
   let def = { ...props };
+
   const promise = new Promise((resolve, reject) => {
     def.resolve = resolve;
     def.reject = reject;
   });
+
   def.promise = promise;
+
   return def;
 }
 
@@ -192,7 +199,7 @@ const kThrow = err => {
 
 /**
  * 常量函数 return(value)
- * @param {*} value 
+ * @param {*} value
  */
 const kReturn = value => ({ value, done: true });
 
@@ -210,12 +217,12 @@ export function makeIterator(next, thro = kThrow, name = "", isHelper) {
   if (isHelper) {
     iterator[HELPER] = true;
   }
-  
+
   // 创建一个Iterator生成函数
   if (typeof Symbol !== "undefined") {
     iterator[Symbol.iterator] = () => iterator;
   }
-  
+
   return iterator;
 }
 

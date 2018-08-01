@@ -156,10 +156,16 @@ put.resolve = (...args) => {
 
 put.sync = deprecate(put.resolve, updateIncentive("put.sync", "put.resolve"));
 
+/**
+ *
+ */
 export function all(effects) {
   return effect(ALL, effects);
 }
 
+/**
+ *
+ */
 export function race(effects) {
   return effect(RACE, effects);
 }
@@ -175,7 +181,7 @@ function getFnCallDesc(meth, fn, args) {
   check(fn, is.notUndef, `${meth}: argument fn is undefined`);
 
   let context = null;
-  
+
   if (is.array(fn)) {
     [context, fn] = fn;
   } else if (fn.fn) {
@@ -230,30 +236,52 @@ export function cps(fn, ...args) {
 }
 
 /**
- * 
- * @param {Function} fn 
- * @param {Any[]} ...args
+ * effect fork
+ * 创建一个effect描述信息:
+ * 用来命令middleware 以Node风格的函数的方式调用fn (在参数中追加一个callback, 用来结束函数执行)
+ *
+ * @param {Function|Generator} fn 函数/generator函数
+ * @param {Any[]} ...args 执行函数时的参数
  * @returns {Object} 返回一个effect plain object
  */
 export function fork(fn, ...args) {
   return effect(FORK, getFnCallDesc("fork", fn, args));
 }
 
+/**
+ * effect spawn
+ * 类似fork
+ *
+ * @param {Function|Generator} fn 函数/generator函数
+ * @param {Any[]} ...args 执行函数时的参数
+ * @returns {Object} 返回一个effect plain object
+ */
 export function spawn(fn, ...args) {
   return detach(fork(fn, ...args));
 }
 
+/**
+ * effect join
+ * 创建一个effect描述信息:
+ * 用来命令middleware 以Node风格的函数的方式调用fn (在参数中追加一个callback, 用来结束函数执行)
+ *
+ * @param {...Task} tasks
+ * @returns {Object} 返回一个effect plain object
+ */
 export function join(...tasks) {
   if (tasks.length > 1) {
     return all(tasks.map(t => join(t)));
   }
+
   const task = tasks[0];
+
   check(task, is.notUndef, "join(task): argument task is undefined");
   check(
     task,
     is.task,
     `join(task): argument ${task} is not a valid Task object ${TEST_HINT}`
   );
+
   return effect(JOIN, task);
 }
 
@@ -295,7 +323,7 @@ export function select(selector, ...args) {
  * effect actionChannel
  * 创建一个effect描述信息:
  * 用来命令 middleware 当接受到匹配pattern的action时, 使用创建的eventChannel进行队列式无阻塞I/O操作
- * 
+ *
  * @params {String} pattern 匹配模式
  * @params {Buffer} buffer 缓冲区对象
  * @returns {Object} 返回一个effect plain object
@@ -347,28 +375,28 @@ export function setContext(props) {
 }
 
 /**
- * 
- * @param {*} patternOrChannel 
- * @param {*} worker 
- * @param {*} args 
+ *
+ * @param {*} patternOrChannel
+ * @param {*} worker
+ * @param {*} args
  */
 export function takeEvery(patternOrChannel, worker, ...args) {
   return fork(takeEveryHelper, patternOrChannel, worker, ...args);
 }
 
 /**
- * 
+ *
  */
 export function takeLatest(patternOrChannel, worker, ...args) {
   return fork(takeLatestHelper, patternOrChannel, worker, ...args);
 }
 
 /**
- * 
- * @param {*} ms 
- * @param {*} pattern 
- * @param {*} worker 
- * @param {*} args 
+ *
+ * @param {*} ms
+ * @param {*} pattern
+ * @param {*} worker
+ * @param {*} args
  */
 export function throttle(ms, pattern, worker, ...args) {
   return fork(throttleHelper, ms, pattern, worker, ...args);

@@ -1,6 +1,6 @@
 /**
  * 任务调度器
- * 将负责调度的task: 
+ * 确保I/O(put/take action)是按FIFO有序执行的 "原子性"
  *  1. 队列中的task, 按FIFO的顺序依次执行
  *  2. task执行具有"原子性": 同一时刻, 只会有一个task再执行
  */
@@ -22,7 +22,7 @@ let semaphore = 0;
  */
 function exec(task) {
   try {
-    // lock, 防止其他task无法执行
+    // lock, 防止其他task执行
     suspend();
     task();
   } finally {

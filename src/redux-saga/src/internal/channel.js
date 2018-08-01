@@ -216,7 +216,7 @@ export function channel(buffer = buffers.fixed()) {
 /**
  * 工厂函数
  * 创建自定应的事件通信渠道 - 将订阅的事件分发给响应的消费者
- * 
+ *
  * @param {Function} subscribe 消息订阅函数 - 初始化外部的事件来源
  * @param {Buffer} [buffer=buffers.none()] 缓冲区, 默认不使用缓冲区,即先于taker之前的消息都会被丢弃
  * @param {Function} matcher 消息匹配器, - 只有匹配时, 才会被channel处理
@@ -292,6 +292,14 @@ export function eventChannel(subscribe, buffer = buffers.none(), matcher) {
  * 标准的通信渠道
  * 由创建saga-middleware时创建, 将中间件链接的store作为Observer( 如果有消息流过channel, 会通知它 )
  *
+ * 当dispatch action,会有如下操作:
+ *  1. 检查是否SAGA_ACTION, 如果时 直接到3
+ *  2. 如果不是, 使用scheduler调度, 再适当的时机到3
+ *
+ *  3. 检查是不是接收到 CHANNEL_END -> YES close channel
+ *  4. 检查是否是关注的input
+ *  5. channel.put(input)
+ *
  * @param {Function} subscribe 消息订阅函数
  * @returns {Object} 返回创建的channel对象
  */
@@ -305,7 +313,8 @@ export function stdChannel(subscribe) {
         return;
       }
 
-      // 排队执行 taker
+      // 排队执行
+      // 确保I/O(put/take action)是按FIFO有序执行的 "原子性"
       asap(() => cb(input));
     })
   );
