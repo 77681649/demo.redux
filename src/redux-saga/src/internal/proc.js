@@ -352,7 +352,7 @@ const wrapHelper = helper => ({ fn: helper });
  * @param {Object} options 选项
  * @param {Number} parentEffectId id
  * @param {String} name saga的名称
- * @param {} cont
+ * @param {Function} cont 
  * @returns {Task}
  */
 export default function proc(
@@ -505,7 +505,7 @@ export default function proc(
   /**
    * 执行 generator
    * 它是一个直到generator终止(done=true)抛出异常才会结束的递归的异步&&可中断执行的函数
-   * @param {Object} [arg] 传递给generator的参数
+   * @param {Object} [arg] 传递给generator内部的参数, 将作为上一次yield语句的返回值
    * @param {Boolean} [isErr=false] 是否发生了错误
    */
   function next(arg, isErr) {
@@ -626,10 +626,10 @@ export default function proc(
     // 通知队列, 任务完成
     task.cont && task.cont(result, isErr);
 
-    //
+    // 通知等待结果的任务
     task.joiners.forEach(j => j.cb(result, isErr));
 
-    //
+    // 清空集合
     task.joiners = null;
   }
 
@@ -764,6 +764,7 @@ export default function proc(
    * @param {Function} cb 回调函数
    */
   function resolvePromise(promise, cb) {
+    // 自定义的取消逻辑
     const cancelPromise = promise[CANCEL];
 
     if (is.func(cancelPromise)) {
@@ -976,37 +977,53 @@ export default function proc(
   }
 
   /**
-   *
+   * 
    */
   function runJoinEffect(t, cb) {
     if (t.isRunning()) {
+      // task 还未结束
       const joiner = { task, cb };
+
+      // 注册取消逻辑
       cb.cancel = () => remove(t.joiners, joiner);
+      
+      // 加入到等待队列
       t.joiners.push(joiner);
     } else {
-      t.isAborted() ? cb(t.error(), true) : cb(t.result());
+      // task 被终止 - 抛出异常
+      // task 已完成 - 返回结果
+      t.isAborted() 
+        ? cb(t.error(), true) 
+        : cb(t.result());
     }
   }
 
   /**
-   *
+   * run cancel effect
+   * 取消任务
+   * 若要取消正在运行的任务，middleware 将调用底层 Generator 对象上的 return。这将取消任务中的当前 Effect，并跳转至 finally 区块
+   * @param {Task} taskToCancel 要取消的任务
+   * @param {Function} cb 回调函数 (result:any) -> void 
    */
   function runCancelEffect(taskToCancel, cb) {
     if (taskToCancel === SELF_CANCELLATION) {
       taskToCancel = task;
     }
+
     if (taskToCancel.isRunning()) {
       taskToCancel.cancel();
     }
+    
     cb();
     // cancel effects are non cancellables
   }
 
   /**
-   *
-   * @param {*} effects
-   * @param {*} effectId
-   * @param {*} cb
+   * combinator: all
+   * 
+   * @param {Iterator[]} effects
+   * @param {Number} effectId
+   * @param {Function} cb 回调函数 (result:any) -> void
    */
   function runAllEffect(effects, effectId, cb) {
     const keys = Object.keys(effects);
@@ -1060,16 +1077,20 @@ export default function proc(
   }
 
   /**
-   *
-   * @param {*} effects
-   * @param {*} effectId
-   * @param {*} cb
+   * combinator: race
+   * 在多个Effect间进行竞争运行
+   * @param {Iterator[]} effects 一个或多个effects
+   * @param {Number} effectId
+   * @param {Function} cb 回调函数 (result:any) -> void
    */
   function runRaceEffect(effects, effectId, cb) {
     let completed;
     const keys = Object.keys(effects);
     const childCbs = {};
 
+    //
+    // 包装回调函数
+    //
     keys.forEach(key => {
       const chCbAtKey = (res, isErr) => {
         if (completed) {
@@ -1077,13 +1098,20 @@ export default function proc(
         }
 
         if (isErr) {
-          // Race Auto cancellation
+          // 发生错误, 自动取消
           cb.cancel();
           cb(res, true);
         } else if (!isEnd(res) && res !== CHANNEL_END && res !== TASK_CANCEL) {
+          
+          // 取消其他effect
           cb.cancel();
+
+          // 标记为完成
           completed = true;
+
+          // 创建响应
           const response = { [key]: res };
+          
           cb(
             is.array(effects)
               ? [].slice.call({ ...response, length: keys.length })
@@ -1091,10 +1119,14 @@ export default function proc(
           );
         }
       };
+
       chCbAtKey.cancel = noop;
       childCbs[key] = chCbAtKey;
     });
 
+    //
+    // 包装取消函数
+    //
     cb.cancel = () => {
       // prevents unnecessary cancellation
       if (!completed) {
@@ -1102,6 +1134,10 @@ export default function proc(
         keys.forEach(key => childCbs[key].cancel());
       }
     };
+
+    //
+    // 执行
+    //
     keys.forEach(key => {
       if (completed) {
         return;
@@ -1111,7 +1147,12 @@ export default function proc(
   }
 
   /**
-   *
+   * 运行 select effect
+   * 
+   * @param {Object} args 参数
+   * @param {Object} args.selector state选择器
+   * @param {Boolean} args.args 传递给selector的参数
+   * @param {Function} cb 回调函数 (result:any) -> void 返回执行结果,即选择出的状态
    */
   function runSelectEffect({ selector, args }, cb) {
     try {
@@ -1140,32 +1181,38 @@ export default function proc(
   }
 
   /**
-   *
+   * 运行 cancelled effect
+   * 返回主任务(generator)是否已经被取消
    * @param {*} data
-   * @param {*} cb
+   * @param {Function} cb 回调函数 (channel:Object) -> void 参数为执行结果
    */
   function runCancelledEffect(data, cb) {
     cb(!!mainTask.isCancelled);
   }
 
   /**
-   *
-   * @param {*} channel
-   * @param {*} cb
+   * channel flush
+   * @param {Channel} channel 通信渠道
+   * @param {Function} cb 回调函数 (channel:Object) -> void 参数为执行结果
    */
   function runFlushEffect(channel, cb) {
     channel.flush(cb);
   }
 
   /**
-   *
+   * run getContext effect
+   * 获得taskContext的上下文
+   * @param {String} prop 属性名
+   * @param {Function} cb 回调函数 (channel:Object) -> void 参数为执行结果
    */
   function runGetContextEffect(prop, cb) {
     cb(taskContext[prop]);
   }
 
   /**
-   *
+   * 设置 setContext effect
+   * @param {Object} props 更新的上下文
+   * @param {Function} cb 回调函数 (channel:Object) -> void 参数为执行结果
    */
   function runSetContextEffect(props, cb) {
     object.assign(taskContext, props);
@@ -1222,7 +1269,8 @@ export default function proc(
       cont,
 
       /**
-       *
+       * 记录等待任务执行结果的任务
+       * @type {Object}
        */
       joiners: [],
 

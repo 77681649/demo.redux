@@ -7,7 +7,13 @@ import createSagaMiddleware from "../redux-saga"; // import saga-middleware-crea
 // 创建saga-middleware
 const sagaMiddleware = createSagaMiddleware();
 
-export { effects, eventChannel, channel } from "../redux-saga";
+export {
+  effects,
+  eventChannel,
+  channel,
+  takeEvery,
+  takeLatest
+} from "../redux-saga";
 
 // 加入到store middleware中, 与redux建立链接
 export const store = createStore(null, applyMiddleware(sagaMiddleware));
