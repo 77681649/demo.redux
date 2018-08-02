@@ -14,23 +14,14 @@
 - [8: 使用 fork: 实现以非阻塞的方式执行任务 - 并行的获得两种不同的资源](https://github.com/77681649/demo.redux/tree/master/src/redux-saga/examples/src/effects/8)
 - [9: 使用 fork: 以非阻塞的方式运行的函数, 内部的错误,外部无法通过 try..catch 捕获](https://github.com/77681649/demo.redux/tree/master/src/redux-saga/examples/src/effects/9)
 - [10: 使用 take: 在我们的 Todo 应用中，我们希望监听用户的操作，并在用户初次创建完三条 Todo 信息时显示祝贺信息]()
+- [11: 使用 cancel: 实现取消功能 - 取消后台的同步任务]()
+- [12: 使用 cancel: 实现自定义的取消逻辑]()
 
 ## channels
 
 - [1: 使用 actionChannel: 暂存来不及消费的 action](https://github.com/77681649/demo.redux/tree/master/src/redux-saga/examples/src/channels/1)
 - [2: 使用 eventChannel: 实现外部流与 saga 进行通信](https://github.com/77681649/demo.redux/tree/master/src/redux-saga/examples/src/channels/2)
 - [3: 使用 channel: 实现 saga 之间的通信 - 同一时间内最多执行三次任务](https://github.com/77681649/demo.redux/tree/master/src/redux-saga/examples/src/channels/3)
-
-- [: 使用 cancel: 实现取消功能]()
-- [: 使用 cancel: 实现自定义的取消逻辑]()
-
-  实战: 监听 action -- watch 未产生的 action ( 未来的 )
-  实战: 非阻塞调用 && 取消任务
-  实战: redux-saga 流程控制 ( series , waterfall , parallel , race )
-  实战: 节流 throttling
-  实战: 防抖动 debouning
-  实战: 重试 retry
-  实战: 测试 undo
 
 https://github.com/77681649/demo.redux/tree/master/src/redux-saga/src/internal/runSaga.js
 /Users/tyo/Documents/Codes/demo/demo.redux/src/redux-saga/src/internal/runSaga.js
@@ -46,19 +37,21 @@ https://github.com/77681649/demo.redux/tree/master/src/redux-saga/src/internal/r
 
 ## combinators
 
-- [: 使用 all: 实现并行执行多个 effect 的功能]()
-- [: 使用 all:]()
-- [: 使用 all:]()
-- [: 使用 race: 实现请求超时的功能]()
-- [: 使用 race: ]()
-- [: 使用 race:]()
+- [1: 使用 all: 实现并行执行多个 effect 的功能]()
+- [2: 使用 all: ]()
+- [3: 使用 race: 实现请求超时的功能]()
+- [4: 使用 race: ]()
+- [5: 使用 race:]()
 
 ## tests
 
 - [: 测试一个异步请求是否成功]()
 - [: 测试是否正常处理错误]()
-- [: ]
+- [: 测试 fork 的 generator]()
 
 ## reals
 
-- [1: 实现登录/登出的逻辑]()
+- [1: 实现登录/登出的逻辑](https://github.com/77681649/demo.redux/tree/master/src/redux-saga/examples/src/reals/1)
+- [2: 防抖动](https://github.com/77681649/demo.redux/tree/master/src/redux-saga/examples/src/reals/2)
+- [3: 重试](https://github.com/77681649/demo.redux/tree/master/src/redux-saga/examples/src/reals/3)
+- [4: 撤销](https://github.com/77681649/demo.redux/tree/master/src/redux-saga/examples/src/reals/4)

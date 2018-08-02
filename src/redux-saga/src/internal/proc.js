@@ -588,6 +588,7 @@ export default function proc(
         result = iterator.next(arg);
       }
 
+      debugger
       if (!result.done) {
         // 如果iterator未执行完成, 那么说明有effect需要处理
         runEffect(result.value, parentEffectId, "", next);
@@ -797,7 +798,7 @@ export default function proc(
   function resolvePromise(promise, cb) {
     // 自定义的取消逻辑
     const cancelPromise = promise[CANCEL];
-
+    
     if (is.func(cancelPromise)) {
       cb.cancel = cancelPromise;
     } else if (is.func(promise.abort)) {
@@ -1057,7 +1058,7 @@ export default function proc(
    * @param {Function} cb 回调函数 (result:any) -> void
    */
   function runCancelEffect(taskToCancel, cb) {
-    debugger;
+    
     if (taskToCancel === SELF_CANCELLATION) {
       taskToCancel = task;
     }

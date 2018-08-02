@@ -13,6 +13,7 @@ export {
   channel,
   takeEvery,
   takeLatest,
+  throttle,
   delay
 } from "../redux-saga";
 
