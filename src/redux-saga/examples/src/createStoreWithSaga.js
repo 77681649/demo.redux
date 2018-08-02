@@ -12,7 +12,8 @@ export {
   eventChannel,
   channel,
   takeEvery,
-  takeLatest
+  takeLatest,
+  delay
 } from "../redux-saga";
 
 // 加入到store middleware中, 与redux建立链接

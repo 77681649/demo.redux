@@ -9,6 +9,11 @@ const {
 } = require("../../../redux/src");
 const defaultReducer = (state, action) => {
   let { type, ...payload } = action;
+
+  if (Object.keys(payload).length === 0) {
+    return undefined;
+  }
+
   return payload || state;
 };
 const log = api => next => action => {
@@ -27,7 +32,7 @@ const withDiffLogger = () => createStore => (reducer, preload, enchaner) => {
     if (prevState != nextState) {
       console.log(chalk.bgBlue(`State Diff:`));
 
-      if (nextState === null) {
+      if (nextState == null) {
         console.log("nextState is null");
         return;
       }

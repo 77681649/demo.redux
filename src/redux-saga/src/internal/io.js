@@ -405,7 +405,7 @@ export function throttle(ms, pattern, worker, ...args) {
 /**
  * 工厂方法 - 创建一个判断指定effect type的函数
  * @param {String} type effect type
- * @returns {Function} 返回一个用于判断effect type 类型的函数
+ * @returns {Function} 返回一个用于判断effect type 类型的函数, 并返回effect的payload
  */
 const createAsEffectType = type => effect =>
   effect && effect[IO] && effect[type];
