@@ -13,30 +13,30 @@ const log = api => next => action => {
 
 const withDiffLogger = () => createStore => (reducer, preload, enchaner) => {
   let store = createStore(reducer, preload, enchaner);
-  let prevState = store.getState();
+  // let prevState = store.getState();
 
-  store.subscribe(function() {
-    let nextState = store.getState();
+  // store.subscribe(function() {
+  //   let nextState = store.getState();
 
-    if (prevState != nextState) {
-      console.log("State Diff:");
+  //   if (prevState != nextState) {
+  //     console.log("State Diff:");
 
-      if (nextState === null) {
-        console.log("nextState is null");
-        return;
-      }
+  //     if (nextState === null) {
+  //       console.log("nextState is null");
+  //       return;
+  //     }
 
-      const keys = Object.keys(nextState);
+  //     const keys = Object.keys(nextState);
 
-      keys.forEach(key => {
-        if (prevState === null || prevState[key] != nextState[key]) {
-          console.log(`  ${key}:`, nextState[key]);
-        }
-      });
-    }
+  //     keys.forEach(key => {
+  //       if (prevState === null || prevState[key] != nextState[key]) {
+  //         console.log(`  ${key}:`, nextState[key]);
+  //       }
+  //     });
+  //   }
 
-    prevState = nextState;
-  });
+  //   prevState = nextState;
+  // });
 
   return store;
 };
@@ -44,19 +44,19 @@ const withDiffLogger = () => createStore => (reducer, preload, enchaner) => {
 function enchancedCreateStore(reducer, preloadState, enchancer) {
   reducer = reducer || defaultReducer;
 
-  const defaultEnchncer = compose(
-    applyMiddleware(log),
-    withDiffLogger()
-  );
+  // const defaultEnchncer = compose(
+  //   applyMiddleware(log),
+  //   withDiffLogger()
+  // );
 
-  if (typeof enchancer === "function") {
-    enchancer = compose(
-      enchancer,
-      defaultEnchncer
-    );
-  } else {
-    enchancer = defaultEnchncer;
-  }
+  // if (typeof enchancer === "function") {
+  //   enchancer = compose(
+  //     enchancer,
+  //     defaultEnchncer
+  //   );
+  // } else {
+  //   enchancer = defaultEnchncer;
+  // }
 
   const store = createStore(reducer, preloadState, enchancer);
 
